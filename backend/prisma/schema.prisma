@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+// generator client {
+//   provider = "prisma-client"
+//   output   = "../src/generated/prisma"
+// }
+
+// datasource db {
+//   provider = "postgresql"
+// }
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Challenge {
+  challenge String   @id
+  expiredAt DateTime @map("expires_at")
+  username  String
+
+  @@index([username])
+  @@index([expiredAt])
+  @@map("challenges")
+}
+
+model Passkey {
+  credentialId String   @id @map("credential_id")
+  username     String
+  publicKey    Bytes    @map("public_key")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([username])
+  @@map("passkeys")
+}

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: passkey-postgres
+    environment:
+      POSTGRES_USER: passkey_user
+      POSTGRES_PASSWORD: passkey_password
+      POSTGRES_DB: passkey_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U passkey_user -d passkey_db
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
