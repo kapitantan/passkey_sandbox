@@ -7,7 +7,6 @@ import { useEffect, useState } from 'react'
 
 const decodeBase64Url = (value: Base64URLString): Uint8Array<ArrayBuffer> => {
     const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
-
     return Uint8Array.from(Buffer.from(base64, 'base64'))
 }
 
@@ -41,6 +40,12 @@ type RawPasskey = {
     createdAt?: string
 }
 
+type DebugItem = {
+    variable: string
+    type: string
+    value: string
+}
+
 const formatPublicKey = (publicKey: RawPasskey['publicKey']): string => {
     if (!publicKey) {
         return '-'
@@ -70,10 +75,97 @@ const formatDate = (value?: string): string => {
     return date.toLocaleString('ja-JP')
 }
 
+const formatDebugValue = (value: unknown): string => {
+    if (typeof value === 'string') {
+        return value
+    }
+
+    try {
+        return JSON.stringify(
+            value,
+            (_key, currentValue) => {
+                if (currentValue instanceof Uint8Array) {
+                    return `Uint8Array(length=${currentValue.length})`
+                }
+
+                if (currentValue instanceof ArrayBuffer) {
+                    return `ArrayBuffer(byteLength=${currentValue.byteLength})`
+                }
+
+                return currentValue
+            },
+            2,
+        )
+    } catch {
+        return String(value)
+    }
+}
+
+const getCredentialSummary = (credential: Credential | null): Record<string, unknown> | null => {
+    if (!credential) {
+        return null
+    }
+
+    const publicKeyCredential = credential as PublicKeyCredential
+    const response = publicKeyCredential.response
+
+    const summary: Record<string, unknown> = {
+        id: publicKeyCredential.id,
+        type: publicKeyCredential.type,
+        rawId: `ArrayBuffer(byteLength=${publicKeyCredential.rawId.byteLength})`,
+    }
+
+    if ('attestationObject' in response && 'clientDataJSON' in response) {
+        const attestationResponse = response as AuthenticatorAttestationResponse
+        summary.response = {
+            clientDataJSON: `ArrayBuffer(byteLength=${attestationResponse.clientDataJSON.byteLength})`,
+            attestationObject: `ArrayBuffer(byteLength=${attestationResponse.attestationObject.byteLength})`,
+        }
+        return summary
+    }
+
+    if ('authenticatorData' in response && 'signature' in response) {
+        const assertionResponse = response as AuthenticatorAssertionResponse
+        summary.response = {
+            clientDataJSON: `ArrayBuffer(byteLength=${assertionResponse.clientDataJSON.byteLength})`,
+            authenticatorData: `ArrayBuffer(byteLength=${assertionResponse.authenticatorData.byteLength})`,
+            signature: `ArrayBuffer(byteLength=${assertionResponse.signature.byteLength})`,
+            userHandle: assertionResponse.userHandle
+                ? `ArrayBuffer(byteLength=${assertionResponse.userHandle.byteLength})`
+                : null,
+        }
+        return summary
+    }
+
+    summary.response = 'Unknown response format'
+    return summary
+}
+
+const createArgumentSnippet = `navigator.credentials.create({
+    publicKey: {
+        challenge: new Uint8Array([/* challenge bytes */]),
+        rp: { name: 'example.com' },
+        user: {
+            id: new Uint8Array([/* user id bytes */]),
+            name: 'alice',
+            displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+    },
+})`
+
+const getArgumentSnippet = `navigator.credentials.get({
+    publicKey: {
+        challenge: new Uint8Array([/* challenge bytes */]),
+    },
+})`
+
 
 function Login() {
     const [username, setUsername] = useState('')
     const [passkeys, setPasskeys] = useState<RawPasskey[]>([])
+    const [registerDebugItems, setRegisterDebugItems] = useState<DebugItem[]>([])
+    const [loginDebugItems, setLoginDebugItems] = useState<DebugItem[]>([])
 
     const fetchPasskeys = async () => {
         const response = await fetch('/api/passkeys', {
@@ -115,9 +207,20 @@ function Login() {
         //チャレンジ発行
         const {challengeResponse} = await response.json()
         console.log('challengeResponse: ', challengeResponse)
+        const createOptions = toCreationOptions(challengeResponse)
         //パスキー作成
-        const publicKeyCredential = await navigator.credentials.create({ publicKey: toCreationOptions(challengeResponse) })
+        const publicKeyCredential = await navigator.credentials.create({ publicKey: createOptions })
         console.log('publicKeyCredential: ', publicKeyCredential)
+
+        if (!publicKeyCredential) {
+            setRegisterDebugItems([
+                { variable: 'challenge', type: 'string', value: challengeResponse.challenge },
+                { variable: 'createOptions', type: 'PublicKeyCredentialCreationOptions', value: formatDebugValue(createOptions) },
+                { variable: 'credential', type: 'null', value: 'null' },
+            ])
+            return
+        }
+
         //パスキー登録
         const registerResponse = await fetch('/api/register', {
             method: 'POST', 
@@ -128,6 +231,22 @@ function Login() {
         })
         const registerResponseJson = await registerResponse.json()
         console.log('registerResponseJson: ', registerResponseJson)
+
+        setRegisterDebugItems([
+            { variable: 'challenge', type: 'string', value: challengeResponse.challenge },
+            { variable: 'createOptions', type: 'PublicKeyCredentialCreationOptions', value: formatDebugValue(createOptions) },
+            {
+                variable: 'credential',
+                type: 'PublicKeyCredential',
+                value: formatDebugValue(getCredentialSummary(publicKeyCredential)),
+            },
+            {
+                variable: 'registerResponseJson',
+                type: 'Record<string, unknown>',
+                value: formatDebugValue(registerResponseJson),
+            },
+        ])
+
         await fetchPasskeys()
     }
 
@@ -138,23 +257,52 @@ function Login() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({username: username}),
+            body: JSON.stringify({username: ''}),
         })
         //チャレンジ発行
+        // この時点ではusenameはまだわからない
         const {challengeResponse} = await challenge.json()
         console.log('challengeResponse: ', challengeResponse)
+        const requestOptions = toRequestOptions(challengeResponse)
         //パスキーでのログイン
-        const credential = await navigator.credentials.get({ publicKey: toRequestOptions(challengeResponse) })
+        // credential.getの返り値にはuserHandleが含まれるので、これを使ってusernameを取得する
+        const credential = await navigator.credentials.get({ publicKey: requestOptions })
         console.log('credential: ', credential)
+
+        if (!credential) {
+            setLoginDebugItems([
+                { variable: 'challenge', type: 'string', value: challengeResponse.challenge },
+                { variable: 'getOptions', type: 'PublicKeyCredentialRequestOptions', value: formatDebugValue(requestOptions) },
+                { variable: 'credential', type: 'null', value: 'null' },
+            ])
+            return
+        }
+
         const loginResponse = await fetch('/api/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({username: username, challenge: challengeResponse.challenge, credential}),
+            body: JSON.stringify({ challenge: challengeResponse.challenge, credential}),
         })
         const loginResponseJson = await loginResponse.json()
         console.log('loginResponseJson: ', loginResponseJson)
+
+        setLoginDebugItems([
+            { variable: 'challenge', type: 'string', value: challengeResponse.challenge },
+            { variable: 'getOptions', type: 'PublicKeyCredentialRequestOptions', value: formatDebugValue(requestOptions) },
+            {
+                variable: 'credential',
+                type: 'PublicKeyCredential',
+                value: formatDebugValue(getCredentialSummary(credential)),
+            },
+            {
+                variable: 'loginResponseJson',
+                type: 'Record<string, unknown>',
+                value: formatDebugValue(loginResponseJson),
+            },
+        ])
+
         if (loginResponseJson.verified) {
             alert('Login successful')
         }
@@ -185,6 +333,32 @@ function Login() {
                         </form>
                     </div>
                     <button onClick={handleCustomPasskeyLogin}>passkey login</button>
+                    <div className="debug-panel">
+                        <div className="debug-section">
+                            <div className="debug-title">register output</div>
+                            {registerDebugItems.length === 0 && <div className="debug-empty">no output yet</div>}
+                            {registerDebugItems.map((item) => (
+                                <div className="debug-row" key={`register-${item.variable}`}>
+                                    <div className="debug-meta">{item.variable} : {item.type}</div>
+                                    <pre className="debug-value">{item.value}</pre>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="debug-section">
+                            <div className="debug-title">login output</div>
+                            {loginDebugItems.length === 0 && <div className="debug-empty">no output yet</div>}
+                            {loginDebugItems.map((item) => (
+                                <div className="debug-row" key={`login-${item.variable}`}>
+                                    <div className="debug-meta">{item.variable} : {item.type}</div>
+                                    <pre className="debug-value">{item.value}</pre>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="snippet-panel">
+                        <pre className="snippet-block">{createArgumentSnippet}</pre>
+                        <pre className="snippet-block">{getArgumentSnippet}</pre>
+                    </div>
                 </div>
 
                 <div className="passkey-table-panel">

@@ -105,10 +105,10 @@ app.post("/api/login", async (req, res) => {
   const challenge = req.body.challenge;
   const credential = req.body.credential;
   console.log('credential:', credential);
-
+  const username = Buffer.from(credential.response.userHandle || '', 'base64').toString();
   const verifiedResponse = await loginPasskey({
     credential,
-    username: req.body.username,
+    username,
     challenge,
   });
   console.log('verifiedResponse', verifiedResponse);

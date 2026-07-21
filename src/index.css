@@ -126,6 +126,77 @@ code {
   width: auto;
 }
 
+.debug-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.debug-section {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  padding: 10px;
+}
+
+.debug-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.debug-empty {
+  text-align: left;
+  color: #666;
+  font-size: 12px;
+}
+
+.debug-row + .debug-row {
+  margin-top: 8px;
+}
+
+.debug-meta {
+  font-size: 12px;
+  text-align: left;
+  color: #333;
+}
+
+.debug-value {
+  margin: 4px 0 0;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background-color: #f8f9fb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.snippet-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.snippet-block {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #f8f9fb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
 .login-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;

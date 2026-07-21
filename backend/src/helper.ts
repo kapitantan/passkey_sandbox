@@ -4,6 +4,7 @@ import { prisma } from "./lib/prisma.js";
 const WEBAUTHN_RP_ID = "localhost";
 const WEBAUTHN_ORIGIN = `http://${WEBAUTHN_RP_ID}:5173`;
 
+
 const claimPasskeyChallenge = async (
   challenge: string,
   username: string,
@@ -32,7 +33,7 @@ const expectedChallenge = (validChallenges: Set<string>, matchedChallengeRef: { 
         return true;
     };
 //パスキー登録の検証
-export const verifyPasskeyRegistration = async (
+export const  verifyPasskeyRegistration = async (
   username: string,
   credentialId: string,
   challenge: string,
@@ -76,7 +77,7 @@ export const verifyPasskeyRegistration = async (
   if (!verifiedRegistrationResponse.verified || !matchedChallengeRef.value) {
     throw new Error("Registration verification failed");
   }
-
+  // 1
   const claimed = await claimPasskeyChallenge(matchedChallengeRef.value, username);
   if (!claimed) {
     throw new Error("Challenge has already been used");
@@ -104,7 +105,7 @@ const findPublicKey = async (credentialId: string, username: string): Promise<Ui
   const passkey = await prisma.passkey.findUnique({
     where: {
       credentialId,
-      username,
+      username
     },
   });
   return passkey ? Uint8Array.from(passkey.publicKey) : null;
@@ -112,9 +113,9 @@ const findPublicKey = async (credentialId: string, username: string): Promise<Ui
 
 // パスキーログイン検証
 export const loginPasskey = async ({ credential, username, challenge }: { credential: any; username: string; challenge: string }) => {
+  //challnge発行時はusernameがわからないので、
   const storedChallenges = await prisma.challenge.findMany({
     where: {
-      username,
       challenge,
       expiredAt: {
         gt: new Date(),
@@ -127,6 +128,7 @@ export const loginPasskey = async ({ credential, username, challenge }: { creden
   const matchedChallengeRef: { value?: string } = {};
   console.log('validChallenges: ', validChallenges);
   console.log('matchedChallengeRef: ', matchedChallengeRef);
+  console.log('userHandle:', username);
   const publicKey = await findPublicKey(credential.id, username);
   if (!publicKey) {
     throw new Error("Public key not found for the given credential ID");
