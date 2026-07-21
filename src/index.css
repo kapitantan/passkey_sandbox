@@ -113,12 +113,73 @@ code {
 .button-container {
   display: flex;
   flex-direction: column; /* 縦並びに指定 */
+  align-items: flex-start;
   gap: 10px; /* ボタン同士の隙間（任意） */
-  width: 100px; /* 親要素の幅（任意） */
+  width: 100%;
 }
+
+.login-title {
+  text-align: center;
+}
+
+.button-container > button {
+  width: auto;
+}
+
+.login-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+}
+
 .register-container {
   display: flex;
   flex-direction: row; /* 横並びに指定 */
   gap: 10px; /* ボタン同士の隙間（任意） */
-  width: 100px; /* 親要素の幅（任意） */
+  width: 100%;
+}
+
+.register-container form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.register-container input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.passkey-table-panel {
+  width: 100%;
+  overflow: auto;
+}
+
+.passkey-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.passkey-table th,
+.passkey-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+  word-break: break-all;
+  font-size: 14px;
+}
+
+.passkey-table thead {
+  background-color: #f7f7f7;
+}
+
+@media (max-width: 900px) {
+  .login-layout {
+    gap: 16px;
+  }
 }

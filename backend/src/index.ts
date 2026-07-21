@@ -25,7 +25,11 @@ app.get("/api/health", (_req, res) => {
     message: "Server is running",
   });
 });
-
+// パスキー一覧取得
+app.get("/api/passkeys", async (req, res) => {
+  const passkeys = await prisma.passkey.findMany({})
+  res.json({ passkeys });
+});
 // チャレンジ発行
 app.post("/api/challenge", async (req, res) => {
   console.log(req.body);
