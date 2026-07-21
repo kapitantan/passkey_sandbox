@@ -116,3 +116,9 @@ code {
   gap: 10px; /* ボタン同士の隙間（任意） */
   width: 100px; /* 親要素の幅（任意） */
 }
+.register-container {
+  display: flex;
+  flex-direction: row; /* 横並びに指定 */
+  gap: 10px; /* ボタン同士の隙間（任意） */
+  width: 100px; /* 親要素の幅（任意） */
+}

@@ -3,6 +3,7 @@ import express from "express";
 import crypto from "crypto";
 import { prisma } from "./lib/prisma.js";
 import { verifyPasskeyRegistration ,registerPasskey} from "./helper.js";
+import { loginPasskey } from "./helper.js";
 
 const app = express();
 const port = 3000;
@@ -59,37 +60,59 @@ app.post("/api/challenge", async (req, res) => {
 
 // パスキー登録
 app.post("/api/register", async (req, res) => {
-  console.log(req.body.credential);
-  const credentialId = req.body.credential.id;
-  const username = req.body.username;
-  //usernameとcredentialを受け取ってchllengeを検証
-  const verifiedRegistrationResponse = await verifyPasskeyRegistration(
-    credentialId,
-    req.body.credential.response.clientDataJSON,
-    req.body.credential.response.attestationObject
-  );
-  console.log('verifiedRegistrationResponse: ', verifiedRegistrationResponse)
-  //usernameとcredentialをDBに保存
-  if (!verifiedRegistrationResponse) {
-    res.status(400).json({error: 'Registration verification failed'});
-    return;
+  try {
+    console.log(req.body.credential);
+    const credentialId = req.body.credential.id;
+    const username = req.body.username;
+
+    // usernameとcredentialを受け取ってchallengeを検証
+    const verifiedRegistrationResponse = await verifyPasskeyRegistration(
+      username,
+      credentialId,
+      req.body.challenge,
+      req.body.credential.response.clientDataJSON,
+      req.body.credential.response.attestationObject,
+    );
+
+    const registrationInfo = verifiedRegistrationResponse.registrationInfo;
+
+    if (!registrationInfo) {
+      return res.status(400).json({
+        error: "Public key not found in registration response",
+      });
+    }
+    console.log('publickey: ', registrationInfo.credential.publicKey);
+    const registerResponse = await registerPasskey(
+      credentialId,
+      username,
+      registrationInfo.credential.publicKey,
+    );
+
+    return res.json({ registerResponse });
+  } catch (error) {
+    console.error(error);
+    return res.status(400).json({ error: "Registration verification failed" });
   }
-  const publicKey = verifiedRegistrationResponse.registrationInfo?.credentialPublicKey;
-  if (!publicKey) {
-    res.status(400).json({error: 'Public key not found in registration response'});
-    return;
-  }
-  console.log('publicKey: ', publicKey);
-  const registerResponse = await registerPasskey(credentialId, username, publicKey);
-  res.json({registerResponse});
 });
 
 // ログイン
-app.post("/api/login", (req, res) => {
-  console.log(req.body);
+app.post("/api/login", async (req, res) => {
+  // console.log('login body:',req.body);
+  const challenge = req.body.challenge;
+  const credential = req.body.credential;
+  console.log('credential:', credential);
 
-  //usernameを受け取ってログインする
-  res.json({ok: true});
+  const verifiedResponse = await loginPasskey({
+    credential,
+    username: req.body.username,
+    challenge,
+  });
+  console.log('verifiedResponse', verifiedResponse);
+  if (!verifiedResponse) {
+    return res.status(400).json({ error: "Authentication verification failed" });
+  }
+  console.log('verifiedResponse.verified', verifiedResponse.verified);
+  res.json({ verified: verifiedResponse.verified });
 });
 
 // サーバー起動
