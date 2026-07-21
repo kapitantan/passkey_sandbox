@@ -230,6 +230,27 @@ code {
   overflow: auto;
 }
 
+.table-group + .table-group {
+  margin-top: 16px;
+}
+
+.table-title {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.table-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.table-title-row .table-title {
+  margin-bottom: 0;
+}
+
 .passkey-table {
   width: 100%;
   border-collapse: collapse;

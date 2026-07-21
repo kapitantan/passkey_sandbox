@@ -40,6 +40,12 @@ type RawPasskey = {
     createdAt?: string
 }
 
+type RawChallenge = {
+    challenge: string
+    username: string
+    expiredAt?: string
+}
+
 type DebugItem = {
     variable: string
     type: string
@@ -163,9 +169,11 @@ const getArgumentSnippet = `navigator.credentials.get({
 
 function Login() {
     const [username, setUsername] = useState('')
+    const [challenges, setChallenges] = useState<RawChallenge[]>([])
     const [passkeys, setPasskeys] = useState<RawPasskey[]>([])
     const [registerDebugItems, setRegisterDebugItems] = useState<DebugItem[]>([])
     const [loginDebugItems, setLoginDebugItems] = useState<DebugItem[]>([])
+    const [isDeletingChallenges, setIsDeletingChallenges] = useState(false)
 
     const fetchPasskeys = async () => {
         const response = await fetch('/api/passkeys', {
@@ -179,8 +187,43 @@ function Login() {
         setPasskeys(data.passkeys ?? [])
     }
 
+    const fetchChallenges = async () => {
+        const response = await fetch('/api/challenges', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+
+        const data = await response.json()
+        setChallenges(data.challenges ?? [])
+    }
+
+    const handleDeleteChallenges = async () => {
+        setIsDeletingChallenges(true)
+        try {
+            const response = await fetch('/api/challenges', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to delete challenges')
+            }
+
+            await fetchChallenges()
+        } catch (error) {
+            console.error(error)
+            alert('challenge deletion failed')
+        } finally {
+            setIsDeletingChallenges(false)
+        }
+    }
+
     useEffect(() => {
-        fetchPasskeys()
+        void Promise.all([fetchPasskeys(), fetchChallenges()])
     }, [])
 
     // health check
@@ -207,6 +250,7 @@ function Login() {
         //チャレンジ発行
         const {challengeResponse} = await response.json()
         console.log('challengeResponse: ', challengeResponse)
+        await fetchChallenges()
         const createOptions = toCreationOptions(challengeResponse)
         //パスキー作成
         const publicKeyCredential = await navigator.credentials.create({ publicKey: createOptions })
@@ -248,6 +292,7 @@ function Login() {
         ])
 
         await fetchPasskeys()
+        await fetchChallenges()
     }
 
     // simplewebauthnを使わないパスキーでのログイン
@@ -263,6 +308,7 @@ function Login() {
         // この時点ではusenameはまだわからない
         const {challengeResponse} = await challenge.json()
         console.log('challengeResponse: ', challengeResponse)
+        await fetchChallenges()
         const requestOptions = toRequestOptions(challengeResponse)
         //パスキーでのログイン
         // credential.getの返り値にはuserHandleが含まれるので、これを使ってusernameを取得する
@@ -304,6 +350,7 @@ function Login() {
         ])
 
         if (loginResponseJson.verified) {
+            await fetchChallenges()
             alert('Login successful')
         }
     }
@@ -362,6 +409,44 @@ function Login() {
                 </div>
 
                 <div className="passkey-table-panel">
+                    <div className="table-group">
+                        <div className="table-title-row">
+                            <div className="table-title">challenge table</div>
+                            <button
+                                type="button"
+                                onClick={handleDeleteChallenges}
+                                disabled={isDeletingChallenges || challenges.length === 0}
+                            >
+                                {isDeletingChallenges ? 'deleting...' : 'delete all'}
+                            </button>
+                        </div>
+                        <table className="passkey-table">
+                            <thead>
+                                <tr>
+                                    <th>username</th>
+                                    <th>challenge</th>
+                                    <th>expiredAt</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {challenges.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3}>no challenges</td>
+                                    </tr>
+                                )}
+                                {challenges.map((item) => (
+                                    <tr key={item.challenge}>
+                                        <td>{item.username || '-'}</td>
+                                        <td>{item.challenge}</td>
+                                        <td>{formatDate(item.expiredAt)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="table-group">
+                        <div className="table-title">passkey table</div>
                     <table className="passkey-table">
                         <thead>
                             <tr>
@@ -387,6 +472,7 @@ function Login() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </>

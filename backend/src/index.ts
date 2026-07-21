@@ -30,6 +30,22 @@ app.get("/api/passkeys", async (req, res) => {
   const passkeys = await prisma.passkey.findMany({})
   res.json({ passkeys });
 });
+
+// チャレンジ一覧取得
+app.get("/api/challenges", async (_req, res) => {
+  const challenges = await prisma.challenge.findMany({
+    orderBy: {
+      expiredAt: 'asc',
+    },
+  });
+  res.json({ challenges });
+});
+
+// チャレンジ一括削除
+app.delete("/api/challenges", async (_req, res) => {
+  const result = await prisma.challenge.deleteMany({});
+  res.json({ deletedCount: result.count });
+});
 // チャレンジ発行
 app.post("/api/challenge", async (req, res) => {
   console.log(req.body);

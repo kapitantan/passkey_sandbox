@@ -2,4 +2,18 @@ node_modules
 # Keep environment variables out of version control
 .env
 
+# TypeScript build output
+dist
+*.tsbuildinfo
+
+# Safety net for accidental in-place tsc output
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+prisma.config.js
+prisma.config.js.map
+prisma.config.d.ts
+prisma.config.d.ts.map
+
 /src/generated/prisma
