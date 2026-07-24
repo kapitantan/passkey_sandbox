@@ -81,7 +81,8 @@ app.post("/api/challenge", async (req, res) => {
 // パスキー登録
 app.post("/api/register", async (req, res) => {
   try {
-    console.log(req.body.credential);
+    console.log('body keyof:', Object.keys(req.body));
+    console.log('credential keyof:', Object.keys(req.body.credential));
     const credentialId = req.body.credential.id;
     const username = req.body.username;
 
@@ -93,21 +94,22 @@ app.post("/api/register", async (req, res) => {
       req.body.credential.response.clientDataJSON,
       req.body.credential.response.attestationObject,
     );
+    console.log('verifiedRegistrationResponse keyof:', Object.keys(verifiedRegistrationResponse));
 
     const registrationInfo = verifiedRegistrationResponse.registrationInfo;
+    console.log('registrationInfo keyof:', Object.keys(registrationInfo));
 
     if (!registrationInfo) {
       return res.status(400).json({
         error: "Public key not found in registration response",
       });
     }
-    console.log('publickey: ', registrationInfo.credential.publicKey);
     const registerResponse = await registerPasskey(
       credentialId,
       username,
       registrationInfo.credential.publicKey,
     );
-
+    console.log('registerResponse:', Object.keys(registerResponse));
     return res.json({ registerResponse });
   } catch (error) {
     console.error(error);
