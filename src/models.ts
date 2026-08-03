@@ -10,9 +10,9 @@ export interface RegisterChallengeResponse {
     displayName: string
   }
   pubKeyCredParams: { type: 'public-key'; alg: -7 | -257 }[]
-//   excludeCredentials: {
-//     type: 'public-key'
-//     id: Base64URLString
-//   }[]
+  excludeCredentials: {
+    type: 'public-key'
+    id: Base64URLString
+  }[]
   timeout: number
 }

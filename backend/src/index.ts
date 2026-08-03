@@ -52,6 +52,8 @@ app.post("/api/challenge", async (req, res) => {
   const username = req.body.username;
     const challenge = crypto.randomBytes(32).toString('base64url')
     const expiredAt = new Date(Date.now() + CHALLENGE_TTL_MS)
+    const credentials = await prisma.passkey.findMany({where: {username}})
+    console.log('credentials: ', credentials)
     // challengeをDBに保存
     await prisma.challenge.create({
       data: {
@@ -72,7 +74,7 @@ app.post("/api/challenge", async (req, res) => {
         displayName: username
       },
       pubKeyCredParams: PUB_KEY_CRED_PARAMS,
-      // excludeCredentials: credentials.map(({ credentialId }) => ({ type: 'public-key', id: credentialId })),
+      excludeCredentials: credentials.map(({ credentialId }) => ({ type: 'public-key', id: credentialId })),
       timeout: TIMEOUT_MS,
   }
   res.json({challengeResponse});

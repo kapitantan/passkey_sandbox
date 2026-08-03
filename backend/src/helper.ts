@@ -77,7 +77,6 @@ export const  verifyPasskeyRegistration = async (
   if (!verifiedRegistrationResponse.verified || !matchedChallengeRef.value) {
     throw new Error("Registration verification failed");
   }
-  // 1
   const claimed = await claimPasskeyChallenge(matchedChallengeRef.value, username);
   if (!claimed) {
     throw new Error("Challenge has already been used");

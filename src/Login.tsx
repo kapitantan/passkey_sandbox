@@ -9,11 +9,15 @@ const decodeBase64Url = (value: Base64URLString): Uint8Array<ArrayBuffer> => {
     const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
     return Uint8Array.from(Buffer.from(base64, 'base64'))
 }
+const encodeBase64Url = (value: Uint8Array<ArrayBuffer>): Base64URLString => {
+    const base64 = Buffer.from(value).toString('base64')
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 // credential.create用のPublicKeyCredentialCreationOptionsに変換する関数
 const toCreationOptions = (challengeResponse: RegisterChallengeResponse): PublicKeyCredentialCreationOptions => ({
   challenge: decodeBase64Url(challengeResponse.challenge),
-//   excludeCredentials: challengeResponse.excludeCredentials.map(({ type, id }) => ({ type, id: decodeBase64Url(id) })),
+  excludeCredentials: challengeResponse.excludeCredentials.map(({ type, id }) => ({ type, id: decodeBase64Url(id) })),
   rp: challengeResponse.rp,
   pubKeyCredParams: challengeResponse.pubKeyCredParams,
   timeout: challengeResponse.timeout,
@@ -26,11 +30,16 @@ const toCreationOptions = (challengeResponse: RegisterChallengeResponse): Public
 
 // credential.get用のPublicKeyCredentialRequestOptionsに変換する関数
 const toRequestOptions = (challengeResponse: RegisterChallengeResponse): PublicKeyCredentialRequestOptions => ({
-  challenge: decodeBase64Url(challengeResponse.challenge),
-  timeout: challengeResponse.timeout,
-  rpId: challengeResponse.rp.id,
-  userVerification: 'required',
-  // allowCredentials: challengeResponse.allowCredentials.map(({ type, id }) => ({ type, id: decodeBase64Url(id) })),
+    ...challengeResponse,
+    challenge: decodeBase64Url(challengeResponse.challenge),
+    timeout: challengeResponse.timeout,
+    rpId: challengeResponse.rp.id,
+    userVerification: 'required',
+    // allowCredentials : [{
+    //     id:decodeBase64Url(''),
+    //     transports:["usb"], // "ble", | "hybrid" | "internal" | "nfc" | "usb"
+    //     type: "public-key"
+    // }],
 })
 
 type RawPasskey = {
@@ -247,13 +256,19 @@ function Login() {
             },
             body: JSON.stringify({username: username}),
         })
-        //チャレンジ発行
+        //チャレンジ発行API
         const {challengeResponse} = await response.json()
         console.log('challengeResponse: ', challengeResponse)
         await fetchChallenges()
         const createOptions = toCreationOptions(challengeResponse)
         //パスキー作成
         const publicKeyCredential = await navigator.credentials.create({ publicKey: createOptions })
+            .catch((error) => {
+            console.error('Error creating credential:', error)
+            alert('Error creating credential: ' + error)
+            return null
+        })
+        console.log('createOptions',createOptions)
         console.log('publicKeyCredential: ', publicKeyCredential)
 
         if (!publicKeyCredential) {
@@ -265,7 +280,7 @@ function Login() {
             return
         }
 
-        //パスキー登録
+        //パスキー登録API
         const registerResponse = await fetch('/api/register', {
             method: 'POST', 
             headers: {
@@ -276,6 +291,11 @@ function Login() {
         const registerResponseJson = await registerResponse.json()
         console.log('registerResponseJson: ', registerResponseJson)
 
+        const attestationResponse = publicKeyCredential.response as AuthenticatorAttestationResponse
+        const clientDataJSONDecoded = JSON.parse(new TextDecoder().decode(attestationResponse.clientDataJSON))
+        const clientDataJSONRaw = encodeBase64Url(new Uint8Array(attestationResponse.clientDataJSON))
+        const attestationObjectRaw = encodeBase64Url(new Uint8Array(attestationResponse.attestationObject))
+
         setRegisterDebugItems([
             { variable: 'challenge', type: 'string', value: challengeResponse.challenge },
             { variable: 'createOptions', type: 'PublicKeyCredentialCreationOptions', value: formatDebugValue(createOptions) },
@@ -283,6 +303,21 @@ function Login() {
                 variable: 'credential',
                 type: 'PublicKeyCredential',
                 value: formatDebugValue(getCredentialSummary(publicKeyCredential)),
+            },
+            {
+                variable: 'clientDataJSON (decoded)',
+                type: 'object',
+                value: formatDebugValue(clientDataJSONDecoded),
+            },
+            {
+                variable: 'clientDataJSON (raw base64)',
+                type: 'string',
+                value: clientDataJSONRaw,
+            },
+            {
+                variable: 'attestationObject (raw base64)',
+                type: 'string',
+                value: attestationObjectRaw,
             },
             {
                 variable: 'registerResponseJson',
@@ -313,6 +348,7 @@ function Login() {
         //パスキーでのログイン
         // credential.getの返り値にはuserHandleが含まれるので、これを使ってusernameを取得する
         const credential = await navigator.credentials.get({ publicKey: requestOptions })
+        console.log('requestOptions',requestOptions)
         console.log('credential: ', credential)
 
         if (!credential) {

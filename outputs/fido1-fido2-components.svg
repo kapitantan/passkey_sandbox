@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#05080d"/><stop offset="1" stop-color="#0a1320"/>
+    </linearGradient>
+    <linearGradient id="leftCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b3f47"/><stop offset="1" stop-color="#202630"/>
+    </linearGradient>
+    <linearGradient id="rightCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#153d68"/><stop offset="1" stop-color="#0b2745"/>
+    </linearGradient>
+    <linearGradient id="purple3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4b3d99"/><stop offset="1" stop-color="#28215f"/>
+    </linearGradient>
+    <filter id="shadow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+    <marker id="arrow3" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#f3f7fb"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif; fill: #f5f7fa; }
+      .title { font-size: 48px; font-weight: 800; }
+      .section { font-size: 34px; font-weight: 800; }
+      .head { font-size: 25px; font-weight: 800; }
+      .body { font-size: 18px; }
+      .small { font-size: 16px; fill: #d7e0eb; }
+      .tiny { font-size: 14px; fill: #c4ceda; }
+      .tag { font-size: 16px; font-weight: 700; }
+      .connector { stroke: #f3f7fb; stroke-width: 3; fill: none; marker-end: url(#arrow3); }
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg3)"/>
+  <text x="800" y="68" text-anchor="middle" class="title">FIDO1とFIDO2の構成</text>
+
+  <!-- two family panels -->
+  <rect x="48" y="105" width="620" height="804" rx="24" fill="#101720" stroke="#8c96a4" stroke-width="2"/>
+  <rect x="704" y="105" width="848" height="804" rx="24" fill="#091a2b" stroke="#4c9dd2" stroke-width="2"/>
+  <text x="358" y="158" text-anchor="middle" class="section">FIDO1</text>
+  <text x="358" y="187" text-anchor="middle" class="small">UAF / U2F の1.0仕様を2014年12月に公開</text>
+  <text x="1128" y="158" text-anchor="middle" class="section">FIDO2</text>
+  <text x="1128" y="187" text-anchor="middle" class="small">WebAuthn と CTAP を組み合わせた標準群</text>
+
+  <!-- UAF -->
+  <rect x="84" y="225" width="548" height="258" rx="20" fill="url(#leftCard)" stroke="#a9b4c2" stroke-width="2" filter="url(#shadow3)"/>
+  <text x="118" y="268" class="head">FIDO UAF</text>
+  <rect x="447" y="242" width="153" height="42" rx="21" fill="#2e7d65"/>
+  <text x="523" y="269" text-anchor="middle" class="tag">パスワードレス</text>
+  <text x="118" y="310" class="body">端末をサービスへ登録し、端末内の認証機構で認証</text>
+  <text x="118" y="345" class="small">生体認証・PINなどを利用できる</text>
+  <rect x="112" y="382" width="132" height="60" rx="13" fill="#303947" stroke="#78879a"/>
+  <rect x="293" y="382" width="132" height="60" rx="13" fill="url(#purple3)" stroke="#8c7ef4"/>
+  <rect x="474" y="382" width="132" height="60" rx="13" fill="#123a61" stroke="#5ca8dc"/>
+  <text x="178" y="419" text-anchor="middle" class="body">UAFクライアント</text>
+  <text x="359" y="419" text-anchor="middle" class="body">認証器</text>
+  <text x="540" y="419" text-anchor="middle" class="body">UAFサーバー</text>
+  <line x1="244" y1="412" x2="287" y2="412" class="connector"/>
+  <line x1="425" y1="412" x2="468" y2="412" class="connector"/>
+
+  <!-- U2F -->
+  <rect x="84" y="515" width="548" height="258" rx="20" fill="url(#leftCard)" stroke="#a9b4c2" stroke-width="2" filter="url(#shadow3)"/>
+  <text x="118" y="558" class="head">FIDO U2F</text>
+  <rect x="423" y="532" width="177" height="42" rx="21" fill="#9a6526"/>
+  <text x="511" y="559" text-anchor="middle" class="tag">第2要素</text>
+  <text x="118" y="600" class="body">ユーザー名・パスワードへ強力な第2要素を追加</text>
+  <text x="118" y="635" class="small">セキュリティキーなどのFIDO認証器が必要</text>
+  <rect x="112" y="672" width="132" height="60" rx="13" fill="#303947" stroke="#78879a"/>
+  <rect x="293" y="672" width="132" height="60" rx="13" fill="url(#purple3)" stroke="#8c7ef4"/>
+  <rect x="474" y="672" width="132" height="60" rx="13" fill="#123a61" stroke="#5ca8dc"/>
+  <text x="178" y="709" text-anchor="middle" class="body">ブラウザ</text>
+  <text x="359" y="697" text-anchor="middle" class="body">U2F認証器</text>
+  <text x="359" y="719" text-anchor="middle" class="tiny">USB / NFC / BLE</text>
+  <text x="540" y="709" text-anchor="middle" class="body">U2Fサーバー</text>
+  <line x1="244" y1="702" x2="287" y2="702" class="connector"/>
+  <line x1="425" y1="702" x2="468" y2="702" class="connector"/>
+
+  <!-- transition note -->
+  <rect x="148" y="813" width="438" height="62" rx="15" fill="#1a2430" stroke="#8592a2" stroke-dasharray="7 7"/>
+  <text x="367" y="839" text-anchor="middle" class="small">U2Fプロトコルは後に CTAP1 と呼ばれ、</text>
+  <text x="367" y="863" text-anchor="middle" class="small">FIDO2で後方互換の第2要素として利用される</text>
+
+  <!-- FIDO2 equation -->
+  <rect x="754" y="218" width="748" height="78" rx="18" fill="#0d2c49" stroke="#66b7ed" stroke-width="2"/>
+  <text x="1128" y="268" text-anchor="middle" class="head">FIDO2 ＝ WebAuthn ＋ CTAP</text>
+
+  <!-- WebAuthn -->
+  <rect x="754" y="332" width="344" height="242" rx="20" fill="url(#rightCard)" stroke="#72c5ff" stroke-width="2" filter="url(#shadow3)"/>
+  <text x="926" y="375" text-anchor="middle" class="head">WebAuthn</text>
+  <text x="926" y="405" text-anchor="middle" class="small">W3CのWeb API仕様</text>
+  <rect x="790" y="445" width="112" height="70" rx="14" fill="#303947" stroke="#78879a"/>
+  <rect x="950" y="445" width="112" height="70" rx="14" fill="#303947" stroke="#78879a"/>
+  <text x="846" y="475" text-anchor="middle" class="small">Webアプリ</text>
+  <text x="846" y="497" text-anchor="middle" class="tiny">RPクライアント</text>
+  <text x="1006" y="475" text-anchor="middle" class="small">ブラウザ</text>
+  <text x="1006" y="497" text-anchor="middle" class="tiny">OS / platform</text>
+  <line x1="902" y1="480" x2="944" y2="480" class="connector"/>
+  <text x="926" y="548" text-anchor="middle" class="small">登録・認証のセレモニーを定義</text>
+
+  <!-- CTAP -->
+  <rect x="1158" y="332" width="344" height="242" rx="20" fill="url(#rightCard)" stroke="#72c5ff" stroke-width="2" filter="url(#shadow3)"/>
+  <text x="1330" y="375" text-anchor="middle" class="head">CTAP2</text>
+  <text x="1330" y="405" text-anchor="middle" class="small">FIDO Allianceの通信プロトコル</text>
+  <rect x="1194" y="445" width="112" height="70" rx="14" fill="#303947" stroke="#78879a"/>
+  <rect x="1354" y="445" width="112" height="70" rx="14" fill="url(#purple3)" stroke="#8c7ef4"/>
+  <text x="1250" y="475" text-anchor="middle" class="small">ブラウザ</text>
+  <text x="1250" y="497" text-anchor="middle" class="tiny">OS / client</text>
+  <text x="1410" y="475" text-anchor="middle" class="small">外部認証器</text>
+  <text x="1410" y="497" text-anchor="middle" class="tiny">キー・スマホ等</text>
+  <line x1="1306" y1="480" x2="1348" y2="480" class="connector"/>
+  <text x="1330" y="548" text-anchor="middle" class="small">USB / NFC / BLE / hybrid など</text>
+
+  <!-- platform/authenticator relation -->
+  <rect x="754" y="610" width="748" height="150" rx="20" fill="#101d2b" stroke="#63758a" stroke-width="2"/>
+  <text x="1128" y="648" text-anchor="middle" class="head">認証器の位置づけ</text>
+  <rect x="804" y="678" width="284" height="54" rx="14" fill="url(#purple3)" stroke="#8c7ef4"/>
+  <rect x="1168" y="678" width="284" height="54" rx="14" fill="url(#purple3)" stroke="#8c7ef4"/>
+  <text x="946" y="711" text-anchor="middle" class="body">内蔵認証器（OS内部APIの場合もある）</text>
+  <text x="1310" y="711" text-anchor="middle" class="body">外部認証器（CTAPで通信）</text>
+
+  <!-- passkey note -->
+  <rect x="754" y="796" width="748" height="79" rx="18" fill="#113724" stroke="#4ba978" stroke-width="2"/>
+  <text x="1128" y="828" text-anchor="middle" class="head">パスキー</text>
+  <text x="1128" y="858" text-anchor="middle" class="small">FIDO2 / WebAuthnを基盤とするDiscoverable Credential</text>
+
+  <rect x="184" y="934" width="1232" height="42" rx="14" fill="#0e1723" stroke="#6d7c8d"/>
+  <text x="800" y="962" text-anchor="middle" class="small">共通点: RPごとに異なる公開鍵暗号の資格情報を使い、フィッシング耐性を高める</text>
+</svg>
