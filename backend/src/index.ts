@@ -3,7 +3,7 @@ import express from "express";
 import crypto from "crypto";
 import { prisma } from "./lib/prisma.js";
 import { verifyPasskeyRegistration ,registerPasskey} from "./helper.js";
-import { loginPasskey } from "./helper.js";
+import { loginPasskey, AuthenticationError } from "./helper.js";
 
 const app = express();
 const port = 3000;
@@ -121,22 +121,28 @@ app.post("/api/register", async (req, res) => {
 
 // ログイン
 app.post("/api/login", async (req, res) => {
-  // console.log('login body:',req.body);
-  const challenge = req.body.challenge;
-  const credential = req.body.credential;
+  const challenge = req.body?.challenge;
+  const credential = req.body?.credential;
   console.log('credential:', credential);
-  const username = Buffer.from(credential.response.userHandle || '', 'base64').toString();
-  const verifiedResponse = await loginPasskey({
-    credential,
-    username,
-    challenge,
-  });
-  console.log('verifiedResponse', verifiedResponse);
-  if (!verifiedResponse) {
-    return res.status(400).json({ error: "Authentication verification failed" });
+
+  if (typeof challenge !== "string" || !credential?.id || !credential?.response) {
+    return res.status(400).json({ error: "Invalid request body" });
   }
-  console.log('verifiedResponse.verified', verifiedResponse.verified);
-  res.json({ verified: verifiedResponse.verified });
+
+  const username = Buffer.from(credential.response.userHandle || '', 'base64').toString();
+
+  try {
+    const verifiedResponse = await loginPasskey({ credential, username, challenge });
+    console.log('verifiedResponse.verified', verifiedResponse.verified);
+    return res.json({ verified: verifiedResponse.verified });
+  } catch (error) {
+    console.error(error);
+    // 失敗理由を返すとクレデンシャル列挙に使われるため、認証失敗はすべて同じ応答にする
+    if (error instanceof AuthenticationError) {
+      return res.status(401).json({ error: "Authentication failed" });
+    }
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // サーバー起動

@@ -4,6 +4,8 @@ import { prisma } from "./lib/prisma.js";
 const WEBAUTHN_RP_ID = "localhost";
 const WEBAUTHN_ORIGIN = `http://${WEBAUTHN_RP_ID}:5173`;
 
+export class AuthenticationError extends Error {}
+
 
 const claimPasskeyChallenge = async (
   challenge: string,
@@ -130,7 +132,7 @@ export const loginPasskey = async ({ credential, username, challenge }: { creden
   console.log('userHandle:', username);
   const publicKey = await findPublicKey(credential.id, username);
   if (!publicKey) {
-    throw new Error("Public key not found for the given credential ID");
+    throw new AuthenticationError("Public key not found for the given credential ID");
   }
   const verifiedAuthenticationResponse = await verifyAuthenticationResponse({
     response: {
@@ -154,11 +156,11 @@ export const loginPasskey = async ({ credential, username, challenge }: { creden
     return null
   });
   if (!verifiedAuthenticationResponse?.verified || !matchedChallengeRef.value) {
-    throw new Error("Authentication verification failed");
+    throw new AuthenticationError("Authentication verification failed");
   }
   const claimed = await claimPasskeyChallenge(matchedChallengeRef?.value, username);
   if (!claimed) {
-    throw new Error("Challenge has already been used");
+    throw new AuthenticationError("Challenge has already been used");
   }
 
   return verifiedAuthenticationResponse;

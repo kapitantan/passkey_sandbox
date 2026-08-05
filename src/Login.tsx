@@ -388,6 +388,8 @@ function Login() {
         if (loginResponseJson.verified) {
             await fetchChallenges()
             alert('Login successful')
+        } else {
+            alert('Login failed')
         }
     }
 
