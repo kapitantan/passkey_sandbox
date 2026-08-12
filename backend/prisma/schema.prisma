@@ -24,6 +24,7 @@ datasource db {
 model Challenge {
   challenge String   @id
   expiredAt DateTime @map("expires_at")
+  userId    String?  @map("user_id")
   username  String
 
   @@index([username])
@@ -33,10 +34,12 @@ model Challenge {
 
 model Passkey {
   credentialId String   @id @map("credential_id")
+  userId       String   @map("user_id")
   username     String
   publicKey    Bytes    @map("public_key")
   createdAt    DateTime @default(now()) @map("created_at")
 
+  @@index([userId])
   @@index([username])
   @@map("passkeys")
 }

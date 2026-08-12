@@ -22,7 +22,7 @@ const toCreationOptions = (challengeResponse: RegisterChallengeResponse): Public
   pubKeyCredParams: challengeResponse.pubKeyCredParams,
   timeout: challengeResponse.timeout,
   user: {
-    id: new TextEncoder().encode(challengeResponse.user.id),
+    id: decodeBase64Url(challengeResponse.user.id),
     name: challengeResponse.user.name,
     displayName: challengeResponse.user.displayName,
   },
@@ -44,6 +44,7 @@ const toRequestOptions = (challengeResponse: RegisterChallengeResponse): PublicK
 
 type RawPasskey = {
     credentialId: string
+    userId: string
     username: string
     publicKey?: { type?: string; data?: number[] } | string | null
     createdAt?: string
@@ -232,6 +233,7 @@ function Login() {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- State updates occur only after both fetch promises yield.
         void Promise.all([fetchPasskeys(), fetchChallenges()])
     }, [])
 
@@ -279,6 +281,7 @@ function Login() {
             ])
             return
         }
+        const registrationCredential = publicKeyCredential as PublicKeyCredential
 
         //パスキー登録API
         const registerResponse = await fetch('/api/register', {
@@ -286,12 +289,16 @@ function Login() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({username: username, challenge: challengeResponse.challenge, credential: publicKeyCredential}),
+            body: JSON.stringify({
+                username,
+                challenge: challengeResponse.challenge,
+                credential: registrationCredential,
+            }),
         })
         const registerResponseJson = await registerResponse.json()
         console.log('registerResponseJson: ', registerResponseJson)
 
-        const attestationResponse = publicKeyCredential.response as AuthenticatorAttestationResponse
+        const attestationResponse = registrationCredential.response as AuthenticatorAttestationResponse
         const clientDataJSONDecoded = JSON.parse(new TextDecoder().decode(attestationResponse.clientDataJSON))
         const clientDataJSONRaw = encodeBase64Url(new Uint8Array(attestationResponse.clientDataJSON))
         const attestationObjectRaw = encodeBase64Url(new Uint8Array(attestationResponse.attestationObject))
@@ -302,7 +309,7 @@ function Login() {
             {
                 variable: 'credential',
                 type: 'PublicKeyCredential',
-                value: formatDebugValue(getCredentialSummary(publicKeyCredential)),
+                value: formatDebugValue(getCredentialSummary(registrationCredential)),
             },
             {
                 variable: 'clientDataJSON (decoded)',
@@ -346,7 +353,7 @@ function Login() {
         await fetchChallenges()
         const requestOptions = toRequestOptions(challengeResponse)
         //パスキーでのログイン
-        // credential.getの返り値にはuserHandleが含まれるので、これを使ってusernameを取得する
+        // credential.getの返り値に含まれるuserHandleを、サーバー側でuserIdとして使用する
         const credential = await navigator.credentials.get({ publicKey: requestOptions })
         console.log('requestOptions',requestOptions)
         console.log('credential: ', credential)
@@ -489,6 +496,7 @@ function Login() {
                         <thead>
                             <tr>
                                 <th>username</th>
+                                <th>userId</th>
                                 <th>credentialId</th>
                                 <th>publicKey</th>
                                 <th>createdAt</th>
@@ -497,12 +505,13 @@ function Login() {
                         <tbody>
                             {passkeys.length === 0 && (
                                 <tr>
-                                    <td colSpan={4}>no passkeys</td>
+                                    <td colSpan={5}>no passkeys</td>
                                 </tr>
                             )}
                             {passkeys.map((passkey) => (
                                 <tr key={passkey.credentialId}>
                                     <td>{passkey.username}</td>
+                                    <td>{passkey.userId}</td>
                                     <td>{passkey.credentialId}</td>
                                     <td>{formatPublicKey(passkey.publicKey)}</td>
                                     <td>{formatDate(passkey.createdAt)}</td>

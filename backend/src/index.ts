@@ -49,33 +49,38 @@ app.delete("/api/challenges", async (_req, res) => {
 // チャレンジ発行
 app.post("/api/challenge", async (req, res) => {
   console.log(req.body);
-  const username = req.body.username;
-    const challenge = crypto.randomBytes(32).toString('base64url')
-    const expiredAt = new Date(Date.now() + CHALLENGE_TTL_MS)
-    const credentials = await prisma.passkey.findMany({where: {username}})
-    console.log('credentials: ', credentials)
-    // challengeをDBに保存
-    await prisma.challenge.create({
-      data: {
-        username,
-        challenge,
-        expiredAt,
-      },
-    });
-    //usernameを受け取ってchallengeを返す
-    const challengeResponse = {
+  const username = typeof req.body?.username === "string" ? req.body.username : "";
+  const challenge = crypto.randomBytes(32).toString("base64url");
+  const expiredAt = new Date(Date.now() + CHALLENGE_TTL_MS);
+  const passkeys = username
+    ? await prisma.passkey.findMany({ where: { username } })
+    : [];
+  const userId = passkeys[0]?.userId ?? crypto.randomBytes(16).toString("base64url");
+  console.log("passkeys: ", passkeys);
+  // challengeをDBに保存
+  await prisma.challenge.create({
+    data: {
+      username,
+      userId,
       challenge,
-      rp: {
-        name: 'localhost',
-      },
-      user: {
-        id: username,
-        name: username,
-        displayName: username
-      },
-      pubKeyCredParams: PUB_KEY_CRED_PARAMS,
-      excludeCredentials: credentials.map(({ credentialId }) => ({ type: 'public-key', id: credentialId })),
-      timeout: TIMEOUT_MS,
+      expiredAt,
+    },
+  });
+  // usernameを受け取ってchallengeを返す
+  const challengeResponse = {
+    challenge,
+    rp: {
+      // id: 'localhost',
+      name: "passkey_sandbox",
+    },
+    user: {
+      id: userId,
+      name: username,
+      displayName: "displayName:" + username,
+    },
+    pubKeyCredParams: PUB_KEY_CRED_PARAMS,
+    excludeCredentials: passkeys.map(({ credentialId }) => ({ type: "public-key", id: credentialId })),
+    timeout: TIMEOUT_MS,
   }
   res.json({challengeResponse});
 });
@@ -87,27 +92,42 @@ app.post("/api/register", async (req, res) => {
     console.log('credential keyof:', Object.keys(req.body.credential));
     const credentialId = req.body.credential.id;
     const username = req.body.username;
+    const challenge = req.body.challenge;
+
+    const registrationChallenge = await prisma.challenge.findFirst({
+      where: {
+        challenge,
+        username,
+        expiredAt: {
+          gt: new Date(),
+        },
+      },
+    });
+    if (!registrationChallenge?.userId) {
+      return res.status(400).json({ error: "Invalid registration challenge" });
+    }
 
     // usernameとcredentialを受け取ってchallengeを検証
     const verifiedRegistrationResponse = await verifyPasskeyRegistration(
       username,
       credentialId,
-      req.body.challenge,
+      challenge,
       req.body.credential.response.clientDataJSON,
       req.body.credential.response.attestationObject,
     );
     console.log('verifiedRegistrationResponse keyof:', Object.keys(verifiedRegistrationResponse));
 
     const registrationInfo = verifiedRegistrationResponse.registrationInfo;
-    console.log('registrationInfo keyof:', Object.keys(registrationInfo));
-
     if (!registrationInfo) {
       return res.status(400).json({
         error: "Public key not found in registration response",
       });
     }
+    console.log('registrationInfo keyof:', Object.keys(registrationInfo));
+
     const registerResponse = await registerPasskey(
       credentialId,
+      registrationChallenge.userId,
       username,
       registrationInfo.credential.publicKey,
     );
@@ -129,10 +149,13 @@ app.post("/api/login", async (req, res) => {
     return res.status(400).json({ error: "Invalid request body" });
   }
 
-  const username = Buffer.from(credential.response.userHandle || '', 'base64').toString();
+  const userId = credential.response.userHandle;
+  if (typeof userId !== "string" || !userId) {
+    return res.status(401).json({ error: "Authentication failed" });
+  }
 
   try {
-    const verifiedResponse = await loginPasskey({ credential, username, challenge });
+    const verifiedResponse = await loginPasskey({ credential, userId, challenge });
     console.log('verifiedResponse.verified', verifiedResponse.verified);
     return res.json({ verified: verifiedResponse.verified });
   } catch (error) {

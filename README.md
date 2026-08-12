@@ -30,7 +30,18 @@ yarn dev
 `http://localhost:3000` で起動。初回はマイグレーションを適用する:
 
 ```bash
-npx prisma migrate dev
+yarn prisma migrate dev
+```
+
+### Prismaマイグレーション
+
+```bash
+# リセットする場合
+# yarn prisma migrate reset --force
+yarn prisma migrate dev --name add-user-id-to-passkeys
+yarn prisma generate
+yarn prisma migrate status
+yarn typecheck
 ```
 
 ### 3. Frontend
