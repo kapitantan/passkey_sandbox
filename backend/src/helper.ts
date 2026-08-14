@@ -4,6 +4,10 @@ import {
   type AuthenticationResponseJSON,
   type VerifiedRegistrationResponse,
 } from "@simplewebauthn/server";
+import {
+  isoBase64URL,
+  parseAuthenticatorData,
+} from "@simplewebauthn/server/helpers";
 import { prisma } from "./lib/prisma.js";
 
 const WEBAUTHN_RP_ID = "localhost";
@@ -125,7 +129,7 @@ const findPublicKey = async (
 };
 
 // パスキーログイン検証
-export const loginPasskey = async ({
+export const verifyPasskeyLogin = async ({
   credential,
   userId,
   challenge,
@@ -154,6 +158,15 @@ export const loginPasskey = async ({
   if (!publicKey) {
     throw new AuthenticationError("Public key not found for the given credential ID");
   }
+  const authenticatorData = isoBase64URL.toBuffer(
+    credential.response.authenticatorData,
+  );
+  const { counter: authenticatorCounter } = parseAuthenticatorData(
+    authenticatorData,
+  );
+  const storedCounter = 0;
+  console.log({ storedCounter, authenticatorCounter });
+
   const verifiedAuthenticationResponse = await verifyAuthenticationResponse({
     response: credential,
     expectedChallenge: expectedChallenge(validChallenges, matchedChallengeRef),
@@ -162,7 +175,7 @@ export const loginPasskey = async ({
     credential:{
       id: credential.id,
       publicKey: publicKey,
-      counter: 0, // You should retrieve the actual counter from your database for the given credential ID
+      counter: storedCounter, // You should retrieve the actual counter from your database for the given credential ID
     },
   }).catch(error => {
     console.error('failed verification:', error)

@@ -2,8 +2,7 @@
 import express from "express";
 import crypto from "crypto";
 import { prisma } from "./lib/prisma.js";
-import { verifyPasskeyRegistration ,registerPasskey} from "./helper.js";
-import { loginPasskey, AuthenticationError } from "./helper.js";
+import { verifyPasskeyRegistration ,registerPasskey, verifyPasskeyLogin, AuthenticationError } from "./helper.js";
 
 const app = express();
 const port = 3000;
@@ -124,6 +123,7 @@ app.post("/api/register", async (req, res) => {
       });
     }
     console.log('registrationInfo keyof:', Object.keys(registrationInfo));
+    console.log('registrationInfo', registrationInfo);
 
     const registerResponse = await registerPasskey(
       credentialId,
@@ -155,7 +155,9 @@ app.post("/api/login", async (req, res) => {
   }
 
   try {
-    const verifiedResponse = await loginPasskey({ credential, userId, challenge });
+    const verifiedResponse = await verifyPasskeyLogin({ credential, userId, challenge });
+    console.log('verifiedResponse keyof:', Object.keys(verifiedResponse));
+    console.log('verifiedResponse:', verifiedResponse);
     console.log('verifiedResponse.verified', verifiedResponse.verified);
     return res.json({ verified: verifiedResponse.verified });
   } catch (error) {
