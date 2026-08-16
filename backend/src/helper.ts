@@ -5,6 +5,9 @@ import {
   type VerifiedRegistrationResponse,
 } from "@simplewebauthn/server";
 import {
+  convertAAGUIDToString,
+  decodeAttestationObject,
+  decodeCredentialPublicKey,
   isoBase64URL,
   parseAuthenticatorData,
 } from "@simplewebauthn/server/helpers";
@@ -51,6 +54,44 @@ export const  verifyPasskeyRegistration = async (
   clientDataJSON: string,
   attestationObject: string,
 ): Promise<VerifiedRegistrationResponse> => {
+  const attestationObjectBuffer = isoBase64URL.toBuffer(attestationObject)
+  const decodedAttestationObject = decodeAttestationObject(attestationObjectBuffer)
+
+  const fmt = decodedAttestationObject.get('fmt')
+  const authDataBuffer = decodedAttestationObject.get('authData')
+  const parsedAuthData = parseAuthenticatorData(authDataBuffer)
+  const attStmt = decodedAttestationObject.get('attStmt')
+
+  const readableBytes = (value?: Uint8Array) => {
+  if (!value) {
+    return undefined
+  }
+  return {
+    byteLength: value.byteLength,
+    hex: Buffer.from(value).toString('hex'),
+    base64url: Buffer.from(value).toString('base64url'),
+  }
+}
+
+  // console.log(decodedAttestationObject)
+  console.log('fmt:', fmt);
+  // console.log('attStmt: ', attStmt);
+  console.log('===attSmt===')
+  console.log('sig: ', attStmt.get('sig'));
+  console.log('x5c: ', attStmt.get('x5c'));
+  console.log('===authData===')
+  console.log('rpIdHash: ', parsedAuthData.rpIdHash);
+  console.log('flags: ', parsedAuthData.flags);
+  console.log('counter: ', parsedAuthData.counter);
+  const { aaguid, credentialID, credentialPublicKey, extensionsData } = parsedAuthData;
+  console.log('aaguid: ', aaguid ? convertAAGUIDToString(aaguid) : undefined);
+  console.log('credentialId: ', readableBytes(credentialID));
+  console.log('credentialPublicKey: ', decodeCredentialPublicKey(credentialPublicKey));
+  console.log('extensionsData: ', extensionsData);
+  // console.log(parsedAuthData);
+
+  
+
   // SimpleWebAuthn v6 の expectedChallenge は同期関数のみ受け取るため、
   // DBアクセスは検証前に完了させる。
   const storedChallenges = await prisma.challenge.findMany({
@@ -83,6 +124,7 @@ export const  verifyPasskeyRegistration = async (
     expectedChallenge: expectedChallenge(validChallenges, matchedChallengeRef),
     expectedOrigin: WEBAUTHN_ORIGIN,
     expectedRPID: WEBAUTHN_RP_ID,
+    requireUserVerification: false,
   });
 
   if (!verifiedRegistrationResponse.verified || !matchedChallengeRef.value) {
@@ -138,6 +180,10 @@ export const verifyPasskeyLogin = async ({
   userId: string;
   challenge: string;
 }) => {
+  console.log('===パスキーログイン検証===')
+  console.log('credential:', credential);
+  const authenticatorDataBuffer = isoBase64URL.toBuffer(credential.response.authenticatorData);
+  console.log('decodedAuthenticatorObject: ',parseAuthenticatorData(authenticatorDataBuffer))
   // challenge発行時はユーザーがまだ分からないため、challengeだけで検索する。
   const storedChallenges = await prisma.challenge.findMany({
     where: {
@@ -164,7 +210,7 @@ export const verifyPasskeyLogin = async ({
   const { counter: authenticatorCounter } = parseAuthenticatorData(
     authenticatorData,
   );
-  const storedCounter = 0;
+  const storedCounter = 0;  // You should retrieve the actual counter from your database for the given credential ID
   console.log({ storedCounter, authenticatorCounter });
 
   const verifiedAuthenticationResponse = await verifyAuthenticationResponse({
@@ -175,8 +221,9 @@ export const verifyPasskeyLogin = async ({
     credential:{
       id: credential.id,
       publicKey: publicKey,
-      counter: storedCounter, // You should retrieve the actual counter from your database for the given credential ID
+      counter: storedCounter,
     },
+    requireUserVerification: false,
   }).catch(error => {
     console.error('failed verification:', error)
     return null
@@ -188,6 +235,6 @@ export const verifyPasskeyLogin = async ({
   if (!claimed) {
     throw new AuthenticationError("Challenge has already been used");
   }
-
+  console.log('===パスキーログイン検証終了===')
   return verifiedAuthenticationResponse;
 };

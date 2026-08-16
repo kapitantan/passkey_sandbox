@@ -45,7 +45,7 @@ app.delete("/api/challenges", async (_req, res) => {
   const result = await prisma.challenge.deleteMany({});
   res.json({ deletedCount: result.count });
 });
-// チャレンジ発行
+// チャレンジ発行: 登録とログインで共通のエンドポイントにしてしまったため、FEで他のプロパティを指定する
 app.post("/api/challenge", async (req, res) => {
   console.log(req.body);
   const username = typeof req.body?.username === "string" ? req.body.username : "";
@@ -87,6 +87,7 @@ app.post("/api/challenge", async (req, res) => {
 // パスキー登録
 app.post("/api/register", async (req, res) => {
   try {
+    console.log('===パスキー登録===')
     console.log('body keyof:', Object.keys(req.body));
     console.log('credential keyof:', Object.keys(req.body.credential));
     const credentialId = req.body.credential.id;
@@ -132,6 +133,7 @@ app.post("/api/register", async (req, res) => {
       registrationInfo.credential.publicKey,
     );
     console.log('registerResponse:', Object.keys(registerResponse));
+    console.log('===パスキー登録終了===')
     return res.json({ registerResponse });
   } catch (error) {
     console.error(error);
@@ -143,6 +145,7 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   const challenge = req.body?.challenge;
   const credential = req.body?.credential;
+  console.log('===パスキー認証===')
   console.log('credential:', credential);
 
   if (typeof challenge !== "string" || !credential?.id || !credential?.response) {
@@ -159,6 +162,7 @@ app.post("/api/login", async (req, res) => {
     console.log('verifiedResponse keyof:', Object.keys(verifiedResponse));
     console.log('verifiedResponse:', verifiedResponse);
     console.log('verifiedResponse.verified', verifiedResponse.verified);
+    console.log('===パスキー認証終了===')
     return res.json({ verified: verifiedResponse.verified });
   } catch (error) {
     console.error(error);

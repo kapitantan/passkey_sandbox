@@ -17,8 +17,14 @@ const encodeBase64Url = (value: Uint8Array<ArrayBuffer>): Base64URLString => {
 // credential.create用のPublicKeyCredentialCreationOptionsに変換する関数
 const toCreationOptions = (challengeResponse: RegisterChallengeResponse): PublicKeyCredentialCreationOptions => ({
   challenge: decodeBase64Url(challengeResponse.challenge),
-  excludeCredentials: challengeResponse.excludeCredentials.map(({ type, id }) => ({ type, id: decodeBase64Url(id) })),
+  authenticatorSelection: {
+    authenticatorAttachment: "platform",//"cross-platform",
+    residentKey: "required",//"discouraged", "preferred",
+    // userVerification: "discouraged",//"preferred" ,"required", 
+  },
+  attestation: "none",//"indirect", "direct", "enterprise",
   rp: challengeResponse.rp,
+  excludeCredentials: challengeResponse.excludeCredentials.map(({ type, id, transports }) => ({ type, id: decodeBase64Url(id), transports })),
   pubKeyCredParams: challengeResponse.pubKeyCredParams,
   timeout: challengeResponse.timeout,
   user: {
@@ -34,7 +40,7 @@ const toRequestOptions = (challengeResponse: RegisterChallengeResponse): PublicK
     challenge: decodeBase64Url(challengeResponse.challenge),
     timeout: challengeResponse.timeout,
     rpId: challengeResponse.rp.id,
-    userVerification: 'required',
+    // userVerification: "discouraged",//"preferred", "required",
     // allowCredentials : [{
     //     id:decodeBase64Url(''),
     //     transports:["usb"], // "ble", | "hybrid" | "internal" | "nfc" | "usb"
@@ -249,7 +255,7 @@ function Login() {
         alert(`${response.status}: ${response.statusText}`)
     }
 
-    // simplewebauthnを使わないパスキー登録
+    // simplewebauthn/browserを使わないパスキー登録
     const handleCustomRegisterClick = async () => {
         const response = await fetch('/api/challenge', {
             method: 'POST', 
@@ -263,15 +269,26 @@ function Login() {
         console.log('challengeResponse: ', challengeResponse)
         await fetchChallenges()
         const createOptions = toCreationOptions(challengeResponse)
+        console.log('createOptions',createOptions)
         //パスキー作成
         const publicKeyCredential = await navigator.credentials.create({ publicKey: createOptions })
             .catch((error) => {
-            console.error('Error creating credential:', error)
-            alert('Error creating credential: ' + error)
-            return null
-        })
-        console.log('createOptions',createOptions)
+                console.error('Error creating credential:', error)
+                alert('Error creating credential: ' + error)
+                return null
+            })
         console.log('publicKeyCredential: ', publicKeyCredential)
+
+        const clientData = JSON.parse(new TextDecoder().decode(publicKeyCredential?.response.clientDataJSON))
+        console.log('clientDataJSON: ',clientData)
+
+        const res = publicKeyCredential?.response
+        console.log('response.attestationObject: ',    new Uint8Array(res.attestationObject))
+        console.log('response.getAuthenticatorData():',new Uint8Array(res.getAuthenticatorData()))
+        console.log('response.getPublicKey():',        new Uint8Array(res?.getPublicKey() ?? new ArrayBuffer(0)))
+        console.log('response.getPublicKeyAlgorithm():',res.getPublicKeyAlgorithm())
+        console.log('response.getTransports():',        res.getTransports())
+
 
         if (!publicKeyCredential) {
             setRegisterDebugItems([
@@ -286,9 +303,7 @@ function Login() {
         //パスキー登録API
         const registerResponse = await fetch('/api/register', {
             method: 'POST', 
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json', },
             body: JSON.stringify({
                 username,
                 challenge: challengeResponse.challenge,
@@ -337,7 +352,7 @@ function Login() {
         await fetchChallenges()
     }
 
-    // simplewebauthnを使わないパスキーでのログイン
+    // simplewebauthn/browserを使わないパスキーでのログイン
     const handleCustomPasskeyLogin = async () => {
         const challenge = await fetch('/api/challenge', {
             method: 'POST', 
@@ -352,10 +367,10 @@ function Login() {
         console.log('challengeResponse: ', challengeResponse)
         await fetchChallenges()
         const requestOptions = toRequestOptions(challengeResponse)
+        console.log('requestOptions',requestOptions)
         //パスキーでのログイン
         // credential.getの返り値に含まれるuserHandleを、サーバー側でuserIdとして使用する
         const credential = await navigator.credentials.get({ publicKey: requestOptions })
-        console.log('requestOptions',requestOptions)
         console.log('credential: ', credential)
 
         if (!credential) {
