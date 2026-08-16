@@ -1,4 +1,3 @@
-**
 ## はじめに
 
 本記事では、ブラウザ標準のWebAuthn APIを直接呼び出し、サーバー側で`@simplewebauthn/server`を使って登録・認証結果を検証するまでを整理する。
@@ -29,8 +28,13 @@
 ## 2. 実装全体の対応関係
 
 登録と認証では、呼び出すWebAuthn APIと`PublicKeyCredential.response`の具体的な型が異なる。
-WebAuthnの`publicKey`オプションを指定した場合、その解決値は`PublicKeyCredential`または`null`になる。つまり、WebAuthnで返る外側の`PublicKeyCredential`は共通だが、その`response`に入るオブジェクトは登録と認証で異なる。
-(Attestation: 認証器の登録証明 、Assertion: 署名付き認証応答)
+
+WebAuthnの`publicKey`オプションを指定した場合、その解決値は`PublicKeyCredential`または`null`になる。
+つまり、WebAuthnで返る外側の`PublicKeyCredential`は共通だが、その`response`に入るオブジェクトは登録と認証で異なる。(英語が苦手でよく見間違える...)
+
+- **Attestation**：登録時の証明
+- **Assertion**：認証時の署名付き応答 
+
 
 | 処理 | 登録 | 認証 |
 |---|---|---|
@@ -56,7 +60,8 @@ sequenceDiagram
     S-->>C: JSON形式のオプション
     C->>C: Base64URL文字列をデコード
     C->>A: create()またはget()
-    A-->>C: PublicKeyCredential
+    A-->>C: 認証器の処理結果
+    C->>C: PublicKeyCredentialを構成
     C->>S: JSON形式の認証結果
     S->>DB: challengeを取得し、認証時は保存済み公開鍵も取得
     S->>S: SimpleWebAuthnで検証
@@ -135,7 +140,9 @@ type PublicKeyCredentialCreationOptionsOverview = {
   excludeCredentials?: Array<{
     type: 'public-key'
     id: BufferSource
-    transports?: Array<( "ble" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb" )>
+    transports?: Array<
+      'ble' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb'
+    >
   }>
   authenticatorSelection?: {
     residentKey?: 'required' | 'preferred' | 'discouraged'
@@ -167,7 +174,6 @@ type PublicKeyCredentialCreationOptionsOverview = {
     - 後方互換性のため、現在も必須メンバーとして残されている。
     - 安全な既定値として`rp.id`と同じ値を設定できる。
     - 仕様：[PublicKeyCredentialEntity](https://www.w3.org/TR/webauthn-3/#dictionary-pkcredentialentity)
-　　
 - `user`（`PublicKeyCredentialUserEntity`、必須）
   - 資格情報が作成されるユーザーアカウントを記述するオブジェクト。
   - `id`（`BufferSource`、必須）
@@ -188,7 +194,7 @@ type PublicKeyCredentialCreationOptionsOverview = {
     - 表示内容は環境によるが、今回確認したGoogle パスワード マネージャーでは「ユーザー名」として表示された。
   - `displayName`（`string`、必須）
     - ユーザーに見せるための読みやすい表示名。
-    - W3Cの例でいきなり日本人名がでてきて驚いた<br>
+    - W3Cの例に日本人名が出てきて驚いた。<br>
     (例)`'Alex Müller'`、`'Alex Müller (ACME Co.)'`、`'田中倫'`。
 
 - `pubKeyCredParams`（`PublicKeyCredentialParameters[]`、必須）
@@ -207,10 +213,10 @@ type PublicKeyCredentialCreationOptionsOverview = {
 
 - `timeout`（`number`、任意）
   - ブラウザへ伝える処理時間の目安。単位はミリ秒で、ブラウザが上書きする場合がある。
-  - アクセシビリティを考慮すると、実運用では5分から10分程度よさそう
+  - アクセシビリティを考慮すると、実運用では5分から10分程度がよさそう。
 
 - `excludeCredentials`（`PublicKeyCredentialDescriptor[]`、任意）
-  - 登録済みのCredential IDを指定し、同じ資格情報の重複登録を防ぐ。
+  - 登録済みのCredential IDを指定し、同じ認証器へのクレデンシャルの重複登録を防ぐ。
   - 各要素は`type`、`id`、任意の`transports`を持つ。
 
 - `authenticatorSelection`（`AuthenticatorSelectionCriteria`、任意）
@@ -229,7 +235,7 @@ type PublicKeyCredentialCreationOptionsOverview = {
 
 - `attestation`（`AttestationConveyancePreference`、任意）
   - Credentialの登録時に、使用された認証器の出所や特性を証明するAttestation情報を、RPへどのように伝えるか指定する。
-  - `'none' | 'indirect' | 'direct' | 'enterprise'`から指定し、既定値は`'none'`で、一般向けのwebサービスではこれで十分である。
+  - `'none' | 'indirect' | 'direct' | 'enterprise'`から指定し、既定値は`'none'`で、一般向けのWebサービスではこれで十分である。
 
 <!-- - `extensions`（`AuthenticationExtensionsClientInputs`、任意）
   - WebAuthn拡張へ渡す入力。利用する拡張ごとにオブジェクトの構造が異なる。 -->
@@ -251,7 +257,9 @@ const creationOptions: PublicKeyCredentialCreationOptions = {
     displayName: 'Alice',
   },
   pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-
+  authenticatorSelection: {
+    residentKey: 'required',
+  },
 }
 ```
 
@@ -285,7 +293,7 @@ type RegistrationCredentialOverview = {
   - Credential IDの元のバイナリ値。
   - `id`と`rawId`は表現形式が異なるだけで、同じCredential IDを示す。
 - `response`: `AuthenticatorAttestationResponse`
-  - 認証器が生成した登録結果。
+  - ブラウザと認証器によって生成された登録結果。
   - `clientDataJSON`と`attestationObject`を中心に、サーバーが登録結果を検証するためのデータを保持する。
   - `clientDataJSON`: `ArrayBuffer`
     - ブラウザが作成したクライアントデータのJSON文字列を、UTF-8のバイト列にしたもの。
@@ -293,7 +301,7 @@ type RegistrationCredentialOverview = {
     - サーバーは`type`が`'webauthn.create'`であること、`challenge`が発行済みの値と一致すること、`origin`が許可したOriginであることなどを検証する。
     - 認証器には`clientDataJSON`そのものではなく、そのSHA-256ハッシュである`clientDataHash`が渡される。
   - `attestationObject`: `ArrayBuffer`
-    - 認証器が作成した、CBOR形式のバイナリデータ。
+    - 登録処理で作成された、CBOR形式のバイナリデータ。
     - CBORデコードすると、`fmt`、`authData`、`attStmt`の3要素を持つオブジェクトになる。
     - `authData`にはRP IDのハッシュ、フラグ、署名カウンターに加え、登録時に生成されたCredential IDと公開鍵などが含まれる。
 - `type`: `'public-key'`
@@ -324,26 +332,35 @@ const clientData = JSON.parse(jsonText)
 
 また、LINEヤフーのテックブログ（[デバイスとアプリの完全性保証からサービスリクエストの保護まで](https://techblog.lycorp.co.jp/ja/20240806a)）では、同社のデバイス証明サービスにおいて、AndroidとiOSを統一的に扱うためWebAuthnを参考に再構成した事例が紹介されている。
 
-Attestationのそれぞれの役割や使われ方については調べれるほど出てきたので今回は値の概要に止めようと思う。今後必要になった際に詳細に調べることとする。
+Attestationの各要素の役割や使われ方は掘り下げるべき内容が多いため、今回は値の概要にとどめる。今後、必要になった際に詳細を調べることとする。以下の構造は、attestation objectのレイアウトをもとに作成した概念的なものである。
 
 ```typescript
 type DecodedAttestationObject = {
-  fmt: 'none' | 'packed' | 'tpm' | 'android-key' | 'android-safetynet' | 'fido-u2f' | 'apple' | 'compound' | 'android-key' 
+  fmt: 'none' | 'packed' | 'tpm' | 'android-key' | 'android-safetynet' | 'fido-u2f' | 'apple'
   authData: Uint8Array
   attStmt: {
-    ver?,  //TPM形式とandroid-safetynetで使用
-    alg?,　//COSEアルゴリズム
-    sig?,　//fmtで定めららた対象に対する署名値
-    x5c?,  //X.509証明書チェーン
-    certInfo?,  //TPM形式で使用
-    pubArea?,   //TPM形式で使用
+    ver?,               // TPM形式とandroid-safetynetで使用
+    alg?,              // アテステーション署名のCOSEアルゴリズムID
+    sig?,              // fmtで定められた対象に対する署名値
+    x5c?,              // X.509証明書チェーン
+    response?,         // android-safetynet形式で使用
+    certInfo?,         // TPM形式で使用
+    pubArea?,          // TPM形式で使用
   }
 }
 
-// authDataの中身
-type ParsedRegistrationAuthenticatorData = {
+// authDataを解析した後の概念的な構造
+type ParsedRegistrationAuthData = {
   rpIdHash: Uint8Array             // RP IDをSHA-256でハッシュした32バイト
-  flags: number                    // UP、UV、AT、EDなどのビットフラグ
+  flags: {                         // UP、UV、AT、EDなどのビットフラグ
+    up: boolean
+    uv: boolean
+    be: boolean
+    bs: boolean
+    at: boolean
+    ed: boolean
+    flagsInt: number
+  }
   signCount: number                // 署名カウンター
   attestedCredentialData: {
     aaguid: Uint8Array             // 認証器モデルを識別する16バイト
@@ -358,13 +375,13 @@ type ParsedRegistrationAuthenticatorData = {
 - `fmt`: `string`
   - アテステーションステートメントの形式。`'none'`、`'packed'`、`'fido-u2f'`、`'tpm'`、`'android-safetynet'`などがある。
 - `authData`: バイト列
-  - authenticator data を含む byte 配列
+  - Authenticator Dataを格納したバイト列。
 - `attStmt`: CBORマップ
-  - 認証器やクレデンシャルの出所を検証するためのアテステーションステートメント。
+  - 形式によって、認証器やクレデンシャルの出所を検証するための情報を含むアテステーションステートメント。
   - 中身は`fmt`によって異なり、`fmt`が`'none'`なら空になる。
 
 `AuthenticatorAttestationResponse`には、バイナリを取り出しやすくするためのメソッドも用意されている。
-また後述の@simplewebauthn/serverにあるhelper関数を利用すれば値を確認することができる。
+また、後述する`@simplewebauthn/server`のヘルパー関数を利用すれば、値を確認できる。
 
 ```typescript
 response.getAuthenticatorData()    // authDataをArrayBufferで返す
@@ -380,7 +397,6 @@ response.getTransports()           // 認証器との通信手段の一覧を返
   - `challenge`やCredential IDなどのバイト列に使われるが、`ArrayBuffer`自体から各バイトを直接読み書きはしない。
 - `Uint8Array`
   - `ArrayBuffer`を1バイトずつ、0〜255の整数として読み書きするためのビュー。
-  - 新しいデータを複製するとは限らず、同じ`ArrayBuffer`を参照できる。
 
 ```typescript
 const buffer = new ArrayBuffer(4)
@@ -388,8 +404,8 @@ const view = new Uint8Array(buffer)
 
 view.set([10, 20, 30, 255])
 
-console.log(buffer.byteLength)  // 4
-console.log(view)               // Uint8Array(4) [10, 20, 30, 255]
+console.log(buffer.byteLength)      // 4
+console.log(view)                   // Uint8Array(4) [10, 20, 30, 255]
 console.log(view.buffer === buffer) // true
 ```
 
@@ -433,12 +449,12 @@ type PublicKeyCredentialRequestOptionsOverview = {
 ```
 
 - `challenge`（`BufferSource`、必須）
-  - サーバーが認証処理ごとに生成する、一度きりのランダム値。型と役割は登録時と同じ
+  - サーバーが認証処理ごとに生成する、一度きりのランダム値。型と役割は登録時と同じ。
 
 - `rpId`（`string`、任意）
   - 認証対象のRelying Party ID。認証器は、このRP IDに紐づくCredentialを探す。
   - 登録時に使用したRP IDと一致する必要がある。
-  - 型と役割は登録時と同じ
+  - 型と役割は登録時と同じ。
 
 - `allowCredentials`（`PublicKeyCredentialDescriptor[]`、任意、既定値は空配列）
   - 認証に使用できるCredential IDの一覧。ユーザー名などからアカウントを先に特定できる場合は、そのアカウントに登録されたCredentialを列挙する。
@@ -469,7 +485,7 @@ type PublicKeyCredentialRequestOptionsOverview = {
 -->
 
 - `timeout`（`number`、任意）
-  - ブラウザへ伝える認証処理時間の目安。型と役割は登録時と同じ
+  - ブラウザへ伝える認証処理時間の目安。型と役割は登録時と同じ。
 
 <!-- 
   - `extensions`（`AuthenticationExtensionsClientInputs`、任意）
@@ -527,31 +543,31 @@ type AuthenticationCredentialOverview = {
 ```
 
 - `authenticatorAttachment`: `AuthenticatorAttachment | null`
-  - 使用された認証器の大分類。型と役割は登録時と同じ
+  - 使用された認証器の大分類。型と役割は登録時と同じ。
 - `id`: `string`
-  - 認証に使用されたCredential IDをBase64URL文字列で表した値。型と役割は登録時と同じ
+  - 認証に使用されたCredential IDをBase64URL文字列で表した値。型と役割は登録時と同じ。
 - `rawId`: `ArrayBuffer`
-  - `id`と同じCredential IDの元のバイナリ値。型と役割は登録時と同じ
+  - `id`と同じCredential IDの元のバイナリ値。型と役割は登録時と同じ。
 - `response`: `AuthenticatorAssertionResponse`
-  - 登録済みの秘密鍵によって作成された認証結果。
+  - 認証器が、登録済みクレデンシャルの秘密鍵を使用して作成した認証結果。
   - `clientDataJSON`: `ArrayBuffer`
     - ブラウザが作成したクライアントデータのJSON文字列を、UTF-8のバイト列にしたもの。
     - 型、役割、エンコード形式は登録時と同じだが、内容は異なる。
-    - 登録時の`type`は`"webauthn.create"`、認証時は`"webauthn.get"`となる
+    - 登録時の`type`は`"webauthn.create"`、認証時は`"webauthn.get"`となる。
   - `authenticatorData`: `ArrayBuffer`
-    - 登録時の`'attestationObject.authData'`から`'attestedCredentialData'`と`'extensions'`を省略した形。
-    - なので、`'rpIdHash'`, `'flags'`, `'signCount'`が含まれる
-  - `signature`: `ArrayBuffer` **認証時に生成**
+    - 登録時の`attestationObject.authData`と同じ基本構造だが、認証時には`attestedCredentialData`を含まない。`extensions`は含まれる場合がある。
+    - `rpIdHash`、`flags`、`signCount`が含まれる。
+  - `signature`: `ArrayBuffer` **認証時の`response`にのみ存在**
     - 認証器が登録済みの秘密鍵で作成した署名。
     - 署名対象は、`authenticatorData`と`SHA-256(clientDataJSON)`を連結したバイト列である。
-    - サーバーはCredential IDに対応する保存済み公開鍵で検証する。署名のエンコード形式は、ES256やRS256など使用したアルゴリズムによって異なる。
-  - `userHandle`: `ArrayBuffer | null`　　**認証時に生成**
+    - サーバーはCredential IDに対応する保存済み公開鍵で検証する。署名のエンコード形式は、使用したアルゴリズムによって異なる。
+  - `userHandle`: `ArrayBuffer | null` **認証時の`response`にのみ存在**
     - 登録時に`user.id`へ指定した、RP内部でユーザーを識別する不透明なID。
     - ユーザー名やメールアドレスそのものではない。
     - `allowCredentials`を省略または空配列にした認証では必ず返され、ユーザー名を先に入力しないログインでアカウントを特定するために使える。
     - `allowCredentials`でCredential IDを指定した場合は、`null`になることがある。値が返された場合は、Credential IDに紐づくユーザーと一致することをサーバーで確認する。
 - `type`: `'public-key'`
-  - 資格情報の種類。WebAuthnでは`'public-key'`になる。型と役割は登録時と同じ
+  - 資格情報の種類。WebAuthnでは`'public-key'`になる。型と役割は登録時と同じ。
 
 <!-- 
 署名対象と検証に使用する鍵の関係は、次のようになる。
@@ -571,7 +587,7 @@ PublicKeyCredential {
   id: "GACW3i3iUnSFh-0fjTeDYg",
   rawId: ArrayBuffer(16),
   response: AuthenticatorAssertionResponse {
-    clientDataJSON: ArrayBuffer(243)
+    clientDataJSON: ArrayBuffer(243),
     authenticatorData: ArrayBuffer(37),
     signature: ArrayBuffer(70),
     userHandle: ArrayBuffer(16),
@@ -580,388 +596,303 @@ PublicKeyCredential {
 }
 ```
 
-認証結果は登録時と同じように、後述の@simplewebauthn/serverのhelper関数を活用すれば確認することができる。
+認証結果は登録時と同じように、後述する`@simplewebauthn/server`のヘルパー関数を利用すれば確認できる。
 
-## 4. challenge発行API
+## 4. `@simplewebauthn/server`による登録・認証の検証
 
-challengeはブラウザではなく、信頼できるサーバー側で生成する。推測が困難なランダム値とし、有効期限を設け、検証成功後に一度だけ消費する必要がある。
+### 4.1 全体の流れ
 
+登録と認証の処理は、概ね次の順序で進む。
 
-```typescript
-import crypto from 'crypto'
+| 順序 | 登録 | 認証 |
+|---|---|---|
+| 1 | サーバーが登録用challengeを発行して保存する | サーバーが認証用challengeを発行して保存する |
+| 2 | クライアントが登録処理を行い、登録結果をサーバーへ送る | クライアントが認証処理を行い、認証結果をサーバーへ送る |
+| 3 | サーバーが保存済みchallengeを取得する | `userHandle`とCredential IDをもとに、検証に使う保存済み公開鍵を取得する |
+| 4 | `verifyRegistrationResponse()`で登録結果を検証する | `verifyAuthenticationResponse()`で認証結果を検証する |
+| 5 | challengeを一度だけ消費する | challengeを一度だけ消費する |
+| 6 | Credential ID、公開鍵、ユーザーIDなどをDBへ保存する | 必要に応じてcounterなどを更新し、認証成功レスポンスを返す |
 
-const CHALLENGE_TTL_MS = 5 * 60 * 1000
+challengeは信頼できるサーバー側で推測困難なランダム値として生成し、有効期限を付けて保存する。
 
-app.post('/api/challenge', async (req, res) => {
-  const username = req.body.username ?? ''
-  const challenge = crypto.randomBytes(32).toString('base64url')
-  const expiredAt = new Date(Date.now() + CHALLENGE_TTL_MS)
+登録時は、登録対象の内部ユーザーIDもchallengeやサーバー側のセッションと対応付ける。クライアントから送られたユーザーIDだけを信用してCredentialを登録してはいけない。
 
-  const registeredPasskeys = username
-    ? await prisma.passkey.findMany({ where: { username } })
-    : []
-  const userId = registeredPasskeys[0]?.userId
-    ?? crypto.randomBytes(16).toString('base64url')
+認証時に`userHandle`を使ってユーザーと公開鍵の候補を検索する場合も、その値は検証前のデータである。検索結果をログイン済みとして扱わず、検証関数が成功した後にだけ認証を成立させる。
 
-  await prisma.challenge.create({
-    data: { challenge, username, userId, expiredAt },
-  })
+### 4.2 `verifyRegistrationResponse()`で登録結果を検証する
 
-  res.json({
-    challengeResponse: {
-      challenge,
-      rp: {
-        id: 'localhost',
-        name: 'localhost',
-      },
-      user: {
-        id: userId,
-        name: username,
-        displayName: username,
-      },
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 },
-        { type: 'public-key', alg: -257 },
-      ],
-      excludeCredentials: registeredPasskeys.map(passkey => ({
-        type: 'public-key',
-        id: passkey.credentialId,
-      })),
-      timeout: 60_000,
-    },
-  })
-})
-```
+`verifyRegistrationResponse()`は、クライアントから受け取った`RegistrationResponseJSON`が、サーバーの発行した登録条件と一致し、Credentialとして保存できる内容であるかを検証する関数である。
 
-`user.id`には、ユーザー名とは別の、変更されない不透明な内部ユーザーIDを設定する。上のAPIではそのIDをBase64URL文字列で生成し、challengeと一緒に保存している。登録処理ではクライアントから送られたIDを信用せず、サーバーに保存したchallengeの`userId`をパスキーと対応付ける。
-
-`timeout: 60_000`は説明用の短い値である。実運用では利用者が操作を完了するための時間を考慮し、5分から10分程度の値を検討する。
-
-この実装では登録と認証で同じAPIを使用している。エンドポイントを共通化する場合でも、実運用では保存するchallengeに`registration`または`authentication`の用途を関連付け、検証時に用途が一致することを必ず確認する。これにより、登録用challengeが認証に使われるなどの処理の混同を防ぐ。
-
-## 5. 登録処理
-
-### 5.1 サーバーのJSONを登録用オプションへ変換する
-
-サーバーから受け取ったchallengeとCredential IDは文字列であるため、WebAuthn APIへ渡す前にバイナリへ変換する。
+主要な引数の型を簡略化すると、次のようになる。
 
 ```typescript
-const toCreationOptions = (
-  value: RegisterChallengeResponse,
-): PublicKeyCredentialCreationOptions => ({
-  challenge: decodeBase64Url(value.challenge),
-  rp: value.rp,
-  user: {
-    id: decodeBase64Url(value.user.id),
-    name: value.user.name,
-    displayName: value.user.displayName,
-  },
-  pubKeyCredParams: value.pubKeyCredParams,
-  excludeCredentials: value.excludeCredentials.map(credential => ({
-    type: credential.type,
-    id: decodeBase64Url(credential.id),
-  })),
-  timeout: value.timeout,
-  authenticatorSelection: {
-    residentKey: 'required',
-    userVerification: 'required',
-  },
-  attestation: 'none',
-})
-```
-
-### 5.2 `navigator.credentials.create()`を呼び出す
-
-```typescript
-const registerPasskey = async (username: string) => {
-  const optionsResponse = await fetch('/api/challenge', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
-  })
-
-  const { challengeResponse } = await optionsResponse.json()
-  const publicKey = toCreationOptions(challengeResponse)
-
-  const credential = await navigator.credentials.create({ publicKey })
-
-  if (!(credential instanceof PublicKeyCredential)) {
-    throw new Error('PublicKeyCredential was not returned')
-  }
-
-  const verificationResponse = await fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username,
-      challenge: challengeResponse.challenge,
-      credential,
-    }),
-  })
-
-  if (!verificationResponse.ok) {
-    throw new Error('Registration verification failed')
-  }
+type VerifyRegistrationResponseOptionsOverview = {
+  response: RegistrationResponseJSON
+  expectedChallenge: string | ((challenge: string) => boolean | Promise<boolean>)
+  expectedOrigin: string | string[]
+  expectedRPID?: string | string[]
+  expectedType?: string | string[]
+  requireUserPresence?: boolean
+  requireUserVerification?: boolean
+  supportedAlgorithmIDs?: COSEAlgorithmIdentifier[]
+  attestationSafetyNetEnforceCTSCheck?: boolean
 }
 ```
 
-`PublicKeyCredential`はバイナリ値を含む。WebAuthn Level 3の`toJSON()`に対応したブラウザでは、JSONシリアライズ時にBase64URL文字列へ変換できる。対応差を吸収したい場合は、明示的な変換処理または`@simplewebauthn/browser`を利用する。
+- **必須プロパティ**
+  - `response`、`expectedChallenge`、`expectedOrigin`
+- **任意プロパティ**
+  - `expectedRPID`、`expectedType`、`requireUserPresence`、`requireUserVerification`、`supportedAlgorithmIDs`、`attestationSafetyNetEnforceCTSCheck`
 
-### 5.3 `verifyRegistrationResponse()`で検証する
+- `response`（`RegistrationResponseJSON`、必須）
+  - クライアントから受け取った登録結果。
+  - `id`、`rawId`、`clientDataJSON`、`attestationObject`などのバイナリ値は、JSONで送信できるBase64URL文字列になっている。
 
-サーバーでは、ブラウザから受け取った登録結果を`verifyRegistrationResponse()`へ渡す。
+- `expectedChallenge`（`string | function`、必須）
+  - サーバーが発行して保存したchallengeと、登録結果に含まれるchallengeが一致するかを検証する。
+  - 1つの文字列を渡すほか、受け取ったchallengeが許可対象かを判定する同期・非同期関数も渡せる。
+  - 今回の実装では、受け取ったチャレンジをDBに存在するか確認する関数を渡している。
+
+- `expectedOrigin`（`string | string[]`、必須）
+  - 登録を許可するOrigin。スキームと、必要な場合はポート番号を含める。
+  - 例：`'http://localhost:5173'`、`'https://example.com'`。
+
+- `expectedRPID`（`string | string[]`、任意）
+  - 登録で使用したRP ID。スキームやポート番号は含めない。
+  - 認証器データ内の`rpIdHash`が、この値をSHA-256でハッシュした結果と一致するか検証される。通常は省略せずに指定する。
+
+- `expectedType`（`string | string[]`、任意）
+  - `clientDataJSON.type`に期待する値。省略時は登録を表す`'webauthn.create'`が要求される。
+
+- `requireUserPresence`（`boolean`、任意、既定値は`true`）
+  - 認証器データのUPフラグを要求するか指定する。
+  - 通常の登録では既定値のまま使用する。
+
+- `requireUserVerification`（`boolean`、任意、既定値は`true`）
+  - 認証器データのUVフラグを要求するか指定する。
+  - 登録オプションで`userVerification: 'discouraged'`を指定し、本人確認を必須にしない場合は、検証側でも`false`を指定して方針を一致させる。
+
+- `supportedAlgorithmIDs`（`COSEAlgorithmIdentifier[]`、任意）
+  - サーバーが検証を許可するCOSEアルゴリズムIDの一覧。
+  - 省略時はSimpleWebAuthnが対応するアルゴリズムが使用される。
+
+- `attestationSafetyNetEnforceCTSCheck`（`boolean`、任意、既定値は`true`）
+  - `android-safetynet`形式を検証する場合に、CTSプロファイルの確認を要求するための設定。
+
+最小限の呼び出し例は次のようになる。`registrationResponse`はクライアントから受け取った`RegistrationResponseJSON`、`storedChallenge`はサーバーに保存していたchallengeとする。
 
 ```typescript
 import { verifyRegistrationResponse } from '@simplewebauthn/server'
 
-const RP_ID = 'localhost'
-const ORIGIN = 'http://localhost:5173'
-
 const verification = await verifyRegistrationResponse({
-  response: {
-    id: credential.id,
-    rawId: credential.rawId,
-    response: {
-      clientDataJSON: credential.response.clientDataJSON,
-      attestationObject: credential.response.attestationObject,
-    },
-    clientExtensionResults: credential.clientExtensionResults ?? {},
-    type: 'public-key',
-  },
+  response: registrationResponse,
   expectedChallenge: storedChallenge.challenge,
-  expectedOrigin: ORIGIN,
-  expectedRPID: RP_ID,
+  expectedOrigin: 'http://localhost:5173',
+  expectedRPID: 'localhost',
+  requireUserVerification: false,
 })
 ```
 
-主に次の内容が検証される。
+この関数では、主に次の内容が検証される。
 
-- `clientDataJSON.type`が登録を表す`webauthn.create`であること
-- 返されたchallengeがサーバーに保存した値と一致すること
-- Originが`expectedOrigin`と一致すること
-- 認証器データ内のRP IDハッシュが`expectedRPID`と一致すること
-- アテステーションと公開鍵資格情報の構造が妥当であること
-- 要求したユーザー検証条件を満たすこと
+- Credential IDとCredential typeの形式
+- `clientDataJSON.type`が`'webauthn.create'`であること
+- challenge、Origin、RP IDが期待した値と一致すること
+- UP・UV・バックアップ関連フラグが検証方針を満たすこと
+- Credential Public Keyのアルゴリズムが許可されていること
+- `fmt`に対応するアテステーションステートメントが妥当であること
 
-検証に成功すると、`registrationInfo.credential`から保存対象を取得できる。
+戻り値の全体像を簡略化すると、次のようになる。
 
 ```typescript
-if (!verification.verified || !verification.registrationInfo) {
-  throw new Error('Registration verification failed')
-}
-
-if (!storedChallenge.userId) {
-  throw new Error('User ID is not associated with the challenge')
-}
-
-const {
-  id,
-  publicKey,
-} = verification.registrationInfo.credential
-
-await prisma.passkey.create({
-  data: {
-    credentialId: id,
-    userId: storedChallenge.userId,
-    username,
-    publicKey: Uint8Array.from(publicKey),
-  },
-})
+type VerifiedRegistrationResponseOverview =
+  | {
+      verified: false
+    }
+  | {
+      verified: true
+      registrationInfo: {
+        fmt: string
+        aaguid: string
+        credential: {
+          id: string
+          publicKey: Uint8Array
+          counter: number
+          transports?: string[]
+        }
+        credentialType: 'public-key'
+        attestationObject: Uint8Array
+        userVerified: boolean
+        credentialDeviceType: 'singleDevice' | 'multiDevice'
+        credentialBackedUp: boolean
+        origin: string
+        rpID?: string
+      }
+    }
 ```
 
-秘密鍵はサーバーへ送られない。サーバーが保存する中心的な情報はCredential ID、公開鍵、ユーザーとの対応である。署名カウンターに対応する場合はcounterを、次回の認証器選択を補助する場合はtransportsも保存する。
+- `verified`
+  - 登録結果を検証できたかを示す。
+  - 不正な値や期待値との不一致では例外が発生する場合もあるため、APIでは例外処理も行う。
 
-## 6. 認証処理
+- `registrationInfo.credential.id`
+  - DBへ保存するCredential ID。Base64URL文字列で返される。
 
-### 6.1 認証用オプションを作る
+- `registrationInfo.credential.publicKey`
+  - 認証時の署名検証に使用する公開鍵。`Uint8Array`として返される。
 
-`navigator.credentials.get()`へusernameを渡すことはない。`PublicKeyCredentialRequestOptions`にもusernameというプロパティは存在しない。
+- `registrationInfo.credential.counter`
+  - 登録時に認証器が返した署名カウンターの初期値。
 
-一般的なパスキーログインでは`allowCredentials`を省略し、認証器やパスワードマネージャーにRP IDと対応するアカウントを表示させる。ユーザーが選択したパスキーのCredential IDや`userHandle`を使い、認証結果を受け取ったサーバーがユーザーを特定する。
+- `registrationInfo.credential.transports`
+  - 次回の認証時に、認証器への接続方法をブラウザへ伝えるためのヒント。
 
-ユーザー名を先に入力する構成も仕様上は可能である。その場合も`get()`へusernameを渡すのではなく、アプリケーションがusernameから登録済みCredential IDを検索し、`allowCredentials`へ指定する。
+- `registrationInfo.userVerified`
+  - 登録時にUVフラグが立っていたかを示す。
+
+- `registrationInfo.credentialDeviceType`、`credentialBackedUp`
+  - Credentialがsingle-deviceかmulti-deviceか、バックアップ済みかを示す。
+
+検証に成功したら、`registrationInfo.credential`からCredential ID、公開鍵、初期counter、transportsを取得する。これらを、サーバーがchallengeやセッションに対応付けていた内部ユーザーIDと一緒にDBへ保存する。秘密鍵は認証器から外へ出ず、サーバーへ保存しない。
+
+### 4.3 `verifyAuthenticationResponse()`で認証結果を検証する
+
+`verifyAuthenticationResponse()`は、クライアントから受け取った`AuthenticationResponseJSON`の署名を登録済み公開鍵で検証し、サーバーが発行した認証条件と一致するかを確認する関数である。
+
+ユーザー名を先に入力しない認証では、`response.userHandle`でユーザー候補を特定し、`response.id`に対応する保存済みCredentialを取得する。ここで取得したCredential ID、公開鍵、counterを検証関数へ渡す。
+
+主要な引数の型を簡略化すると、次のようになる。
 
 ```typescript
-const toRequestOptions = (
-  value: RegisterChallengeResponse,
-): PublicKeyCredentialRequestOptions => ({
-  challenge: decodeBase64Url(value.challenge),
-  rpId: value.rp.id,
-  timeout: value.timeout,
-  userVerification: 'required',
-})
-```
-
-### 6.2 `navigator.credentials.get()`を呼び出す
-
-```typescript
-const authenticatePasskey = async () => {
-  const optionsResponse = await fetch('/api/challenge', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  })
-
-  const { challengeResponse } = await optionsResponse.json()
-  const publicKey = toRequestOptions(challengeResponse)
-
-  const credential = await navigator.credentials.get({ publicKey })
-
-  if (!(credential instanceof PublicKeyCredential)) {
-    throw new Error('PublicKeyCredential was not returned')
+type VerifyAuthenticationResponseOptionsOverview = {
+  response: AuthenticationResponseJSON
+  expectedChallenge:
+    | string
+    | ((challenge: string) => boolean | Promise<boolean>)
+  expectedOrigin: string | string[]
+  expectedRPID: string | string[]
+  credential: {
+    id: string
+    publicKey: Uint8Array
+    counter: number
+    transports?: string[]
   }
-
-  const verificationResponse = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      challenge: challengeResponse.challenge,
-      credential,
-    }),
-  })
-
-  if (!verificationResponse.ok) {
-    throw new Error('Authentication verification failed')
+  expectedType?: string | string[]
+  requireUserVerification?: boolean
+  advancedFIDOConfig?: {
+    userVerification?: 'required' | 'preferred' | 'discouraged'
   }
 }
 ```
 
-ユーザー名を先に入力しない認証では、サーバーは返された`userHandle`でユーザーを特定し、そのユーザーに`credential.id`が属することを照合する。照合できたCredential IDに対応する保存済み公開鍵を、署名検証に使用する。
+- **必須プロパティ**
+  - `response`、`expectedChallenge`、`expectedOrigin`、`expectedRPID`、`credential`
+- **任意プロパティ**
+  - `expectedType`、`requireUserVerification`、`advancedFIDOConfig`
 
-### 6.3 `verifyAuthenticationResponse()`で検証する
+- `response`（`AuthenticationResponseJSON`、必須）
+  - クライアントから受け取った認証結果。
+  - Credential ID、`clientDataJSON`、`authenticatorData`、`signature`、`userHandle`などを含む。
 
-認証結果の`userHandle`とCredential IDを使って登録時の公開鍵を取得し、`verifyAuthenticationResponse()`へ渡す。
+- `expectedChallenge`（`string | function`、必須）
+  - サーバーが発行して保存したchallengeと、認証結果に含まれるchallengeが一致するかを検証する。
+  - 登録検証と同様に、文字列または判定関数を指定できる。
+
+- `expectedOrigin`（`string | string[]`、必須）
+  - 認証を許可するOrigin。
+
+- `expectedRPID`（`string | string[]`、必須）
+  - 認証対象のRP ID。認証器データ内の`rpIdHash`との照合に使われる。
+
+- `credential`（`WebAuthnCredential`、必須）
+  - 認証に使用されたCredential IDに対応する、サーバー保存済みのCredential情報。
+  - `id`は保存済みCredential ID、`publicKey`は登録時に保存した公開鍵、`counter`は前回の認証後に保存した署名カウンターである。
+  - `transports`を保存している場合は任意で指定できる。
+
+- `expectedType`（`string | string[]`、任意）
+  - `clientDataJSON.type`に期待する値。省略時は認証を表す`'webauthn.get'`が要求される。
+
+- `requireUserVerification`（`boolean`、任意、既定値は`true`）
+  - 認証器データのUVフラグを要求するか指定する。
+  - 認証オプションで`userVerification: 'discouraged'`を指定した場合は、検証側でも`false`を指定して方針を一致させる。
+
+- `advancedFIDOConfig`（オブジェクト、任意）
+  - FIDO準拠テストなど、UP・UVフラグを通常より細かい規則で評価する場合に使用する。
+  - 通常の実装では指定しない。
+
+最小限の呼び出し例は次のようになる。`authenticationResponse`はクライアントから受け取った`AuthenticationResponseJSON`、`storedPasskey`はCredential IDに対応するDB上の保存値とする。
 
 ```typescript
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 
-const userId = credential.response.userHandle
-
-if (typeof userId !== 'string' || !userId) {
-  throw new Error('User handle was not returned')
-}
-
-const storedPasskey = await prisma.passkey.findFirst({
-  where: {
-    userId,
-    credentialId: credential.id,
-  },
-})
-
-if (!storedPasskey) {
-  throw new Error('Passkey not found')
-}
-
 const verification = await verifyAuthenticationResponse({
-  response: {
-    id: credential.id,
-    rawId: credential.rawId,
-    response: credential.response,
-    authenticatorAttachment: credential.authenticatorAttachment,
-    clientExtensionResults: credential.clientExtensionResults ?? {},
-    type: 'public-key',
-  },
+  response: authenticationResponse,
   expectedChallenge: storedChallenge.challenge,
-  expectedOrigin: ORIGIN,
-  expectedRPID: RP_ID,
+  expectedOrigin: 'http://localhost:5173',
+  expectedRPID: 'localhost',
   credential: {
     id: storedPasskey.credentialId,
     publicKey: Uint8Array.from(storedPasskey.publicKey),
     counter: 0,
   },
+  requireUserVerification: false,
 })
 ```
 
-主に次の内容が検証される。
+この関数では、主に次の内容が検証される。
 
-- `clientDataJSON.type`が認証を表す`webauthn.get`であること
-- challenge、Origin、RP IDが期待値と一致すること
-- UP・UVフラグが要求を満たすこと
-- 登録済み公開鍵で署名を検証できること
-- 署名カウンターを使う場合、今回値と保存値の関係が不自然でないこと
+- Credential IDとCredential typeの形式
+- `clientDataJSON.type`が`'webauthn.get'`であること
+- challenge、Origin、RP IDが期待した値と一致すること
+- UP・UV・バックアップ関連フラグが検証方針を満たすこと
+- `authenticatorData`と`clientDataJSON`に対する署名を、保存済み公開鍵で検証できること
+- 認証器が署名カウンターを使用する場合、今回値と保存値の関係が不自然でないこと
 
-#### counterと`newCounter`
-
-署名カウンターに対応する認証器は、認証に成功するたびにカウンターを増やし、`authenticatorData`内の`signCount`としてRPへ返す。RPサーバーは前回の値をCredentialごとに保存し、次の認証で認証器が返した値と比較する必要がある。`verifyAuthenticationResponse()`の`credential.counter`に渡すのはこの保存値であり、検証成功後の`authenticationInfo.newCounter`には今回認証器が返した値が入る。サーバー側で`1`を加算した値ではない。
-
-ただし、署名カウンターを使用しない認証器は`signCount`を常に`0`として返す。今回、私がGoogle パスワード マネージャーで作成したパスキーを確認した範囲では、`signCount`と`newCounter`はともに`0`であり、この環境では署名カウンターを使用していないように見えた。そのため、今回の実装では検証関数へ渡す`credential.counter`に`0`を設定している。これは今回の環境とCredentialでの確認結果であり、Google パスワード マネージャーがすべての環境で署名カウンターを使用しないことを示すものではない。
-
-保存値と今回値がともに`0`の場合、署名カウンターによる比較は行われない。そのためカウンターによるクローンの兆候検知はできないが、challenge、Origin、RP ID、UP・UVフラグ、署名などの検証は引き続き行われる。将来`newCounter`が`0`以外になる認証器も対象にする場合は、Credentialごとにcounterを保存し、認証成功後に保存値を`newCounter`で更新する。詳細は[WebAuthn Level 3のSignature Counter Considerations](https://www.w3.org/TR/webauthn-3/#sctn-sign-counter)を参照。
-
-## 7. challengeを一度だけ消費する
-
-challengeの一致を確認するだけでは、同じchallengeを再利用できる余地が残る。有効期限内であることを確認し、検証に成功した後で削除する。
+戻り値の全体像を簡略化すると、次のようになる。
 
 ```typescript
-const storedChallenge = await prisma.challenge.findUnique({
-  where: { challenge: requestChallenge },
-})
-
-if (!storedChallenge || storedChallenge.expiredAt <= new Date()) {
-  throw new Error('Challenge is invalid or expired')
-}
-
-// verifyRegistrationResponse()または
-// verifyAuthenticationResponse()を実行する
-
-await prisma.challenge.delete({
-  where: { challenge: storedChallenge.challenge },
-})
-```
-
-`deleteMany()`を使う場合は、例外が発生しなかったことだけでなく`count === 1`を確認する必要がある。削除件数が`0`なら、すでに使用済みか、保存条件が一致していない。認証や登録を成功として確定するのは、challengeを一度だけ消費できたことを確認した後にする。
-
-上の`findUnique()`と`delete()`は流れを示すための簡略例であり、同じchallengeに対する処理が同時に実行される可能性がある。実運用ではトランザクションや条件付き削除を使用し、検証とchallengeの消費が競合しても1件だけ成功するようにする。
-
-アカウント選択前にchallengeを発行する場合、その時点ではユーザーが確定していない。そのため、challengeを空のユーザー名で保存して後から確定したユーザー名で削除すると条件が一致しない。challenge自体、セッションID、または認証処理IDを基準に一度だけ消費する設計が必要である。
-
-## 8. データベースへ保存する情報
-
-[kapitantan/passkey_sandbox](https://github.com/kapitantan/passkey_sandbox)では、challengeとパスキーを次の2テーブルに保存している。`userId`は変更されない不透明な内部ユーザーIDであり、登録時の`user.id`に設定する。登録時はchallengeに保存した`userId`をパスキーへ引き継ぎ、認証時は`userHandle`として返された値がCredential IDの所有者と一致することを照合する。`username`は表示や検索に使う値であり、`user.id`とは区別する。
-
-```prisma
-model Challenge {
-  challenge String   @id
-  expiredAt DateTime
-  userId    String?
-  username  String
-}
-
-model Passkey {
-  credentialId String   @id
-  userId       String
-  username     String
-  publicKey    Bytes
-  createdAt    DateTime @default(now())
+type VerifiedAuthenticationResponseOverview = {
+  verified: boolean
+  authenticationInfo: {
+    credentialID: string
+    newCounter: number
+    userVerified: boolean
+    credentialDeviceType: 'singleDevice' | 'multiDevice'
+    credentialBackedUp: boolean
+    origin: string
+    rpID: string
+  }
 }
 ```
 
-今回確認したGoogle パスワード マネージャーのCredentialでは署名カウンターが`0`のままだったため、現在のスキーマにcounter列は設けていない。署名カウンターを利用する認証器への対応や実運用を想定する場合は、次の情報も保持する。
+- `verified`
+  - 認証結果を検証できたかを示す。
+  - 期待値との不一致や署名検証の失敗では例外が発生する場合もある。
 
-```prisma
-model Passkey {
-  credentialId String   @id
-  userId       String
-  publicKey    Bytes
-  counter      BigInt
-  transports   String[]
-  deviceType   String?
-  backedUp     Boolean?
-  createdAt    DateTime @default(now())
-  lastUsedAt   DateTime?
-}
-```
+- `authenticationInfo.credentialID`
+  - 認証に使用されたCredential ID。
 
-| 保存項目 | 用途 |
-|---|---|
-| Credential ID | 認証に使われたパスキーの検索 |
-| ユーザーID | パスキーとアカウントの対応 |
-| 公開鍵 | 認証時の署名検証 |
-| counter | 署名カウンターを利用する場合に、認証器複製の兆候を検知する補助情報 |
-| transports | 次回認証時に接続方法をブラウザへ伝えるヒント |
-| deviceType・backedUp | single-device／multi-deviceやバックアップ状態の管理 |
+- `authenticationInfo.newCounter`
+  - 今回の認証器データに含まれていた署名カウンター。
+  - サーバー側で`1`を加算した値ではない。
 
-## 9. なぜ`@simplewebauthn/server`だけ使ったのか
+- `authenticationInfo.userVerified`
+  - 認証時にUVフラグが立っていたかを示す。
+
+- `authenticationInfo.credentialDeviceType`、`credentialBackedUp`
+  - Credentialのデバイス種別とバックアップ状態を示す。
+
+>[!note] 署名カウンターについて
+> 署名カウンターに対応する場合、`credential.counter`にはDBに保存している前回値を渡し、検証成功後に保存値を`authenticationInfo.newCounter`で更新する。認証器が返す値は必ずしも前回値に`1`を加えた値とは限らない。
+> 
+>ただし、署名カウンターを使用しない認証器は`signCount`を常に`0`として返す。今回、Google パスワード マネージャーで作成したCredentialを確認した範囲では`signCount`と`newCounter`がともに`0`だったため、現在の実装では`credential.counter`に`0`を設定している。これは確認した環境とCredentialでの結果であり、Google パスワード マネージャーがすべての環境で署名カウンターを0に設定しているかは不明である。少なくとも私が確認した限りではカウンターは0であった。
+>
+>保存値と今回値がともに`0`の場合、署名カウンターによるクローンの兆候検知はできないが、challenge、Origin、RP ID、UP・UVフラグ、署名などの検証は引き続き行われる。詳細は[WebAuthn Level 3のSignature Counter Considerations](https://www.w3.org/TR/webauthn-3/#sctn-sign-counter)を参照。
+
+challengeの一致を確認するだけでは、同じchallengeを再利用できる余地が残る。登録・認証のどちらでも、検証に成功した後でchallengeを一度だけ消費する。
+
+
+## 5. なぜ`@simplewebauthn/server`を使うのか
 
 クライアント側では、WebAuthn APIがブラウザ標準として提供されているため、次の2つを直接呼び出せる。
 
@@ -974,7 +905,6 @@ navigator.credentials.get({ publicKey: requestOptions })
 
 - `clientDataJSON`のデコードと検証
 - CBOR形式の`attestationObject`のデコード
-- 固定フィールドと可変長データからなる`authenticatorData`の解析
 - COSE形式の公開鍵の取り扱い
 - Origin、RP IDハッシュ、UP・UVフラグの検証
 - アテステーション形式ごとの検証
@@ -983,9 +913,14 @@ navigator.credentials.get({ publicKey: requestOptions })
 
 これらを独自実装すると、実装量だけでなくセキュリティ上の判断箇所も増える。そのため、今回の実装ではサーバー検証に`@simplewebauthn/server`を使用した。
 
-## 10. `@simplewebauthn/browser`を使う場合
+外部ライブラリを使用するので、メンテナンスされており、利用実績が多いものを選んだほうが良い。
 
-`@simplewebauthn/browser`はWebAuthn APIを置き換えるものではなく、`create()`と`get()`の呼び出しやJSON・バイナリ変換を扱いやすくするラッパーである。
+## 6. `@simplewebauthn/browser`を使う場合
+
+
+`@simplewebauthn/server`だけでなく、`@simplewebauthn/browser`も存在する。当初は調査不足でbrowserは導入しなかったが、調べていくうちにserverを導入するならbrowserも導入したほうがメリットが多そうである。
+
+このライブラリはWebAuthn APIを置き換えるものではなく、`create()`と`get()`の呼び出しやJSON・バイナリ変換を扱いやすくするラッパーである。
 
 ```typescript
 // 今回の直接実装
@@ -1006,29 +941,15 @@ startAuthentication({ optionsJSON })
 - WebAuthn処理の重複実行を中断できる
 - `WebAuthnError`でエラー原因を扱いやすくできる
 
-ただし、サーバーからオプションを取得する処理と、認証結果をサーバーへ送る処理は自動化しない。`fetch`などの通信処理はアプリケーション側で実装する。
-
 今回はWebAuthn APIへ渡す型、バイナリ変換、返り値の内容を確認することが目的であったため、クライアント用ライブラリは使用しなかった。実運用で変換処理やブラウザ差異への対応を減らす場合は、導入する利点が大きい。
-
-## 11. 実装時の確認事項
-
-- challengeはサーバー側で十分な長さのランダム値として生成する
-- challengeに有効期限を設け、検証成功後に一度だけ消費する
-- 登録用challengeと認証用challengeの用途を分ける
-- `expectedOrigin`にはスキームとポートを含むOriginを指定する
-- `expectedRPID`にはスキームとポートを含まないRP IDを指定する
-- `user.id`には変更されない不透明なユーザーIDを使用する
-- アカウント選択式のログインではDiscoverable Credentialを登録する
-- ユーザー名を先に入力しない認証では、`userHandle`でユーザーを特定し、Credential IDがそのユーザーに属することを照合する
-- 署名カウンターを利用する場合は、検証成功後に保存値を`newCounter`で更新する
-- 検証前のデータを信用してログイン済みセッションを発行しない
-- 本番環境ではHTTPSを使用する
 
 ## まとめ
 
 今回の実装では、ブラウザ標準のWebAuthn APIを直接呼び出すことで、登録・認証時のオプションと`PublicKeyCredential`の構造を確認した。
 
-クライアント側の中心は、Base64URL文字列とバイナリ値を変換し、`create()`または`get()`を呼び出す処理である。サーバー側の中心は、challenge、Origin、RP ID、署名を検証し、Credential ID、公開鍵、内部ユーザーIDの対応を保存する処理である。署名カウンターを利用する場合は、認証後に`newCounter`も保存する。
+クライアント側の中心は、Base64URL文字列とバイナリ値を変換し、`create()`または`get()`を呼び出す処理である。
+
+サーバー側の中心は、challenge、Origin、RP ID、署名を検証し、Credential ID、公開鍵、内部ユーザーIDの対応を保存する処理である。署名カウンターを利用する場合は、認証後に`newCounter`も保存する。
 
 WebAuthn APIを直接利用するとデータの流れを理解しやすい。一方、実運用では`@simplewebauthn/browser`と`@simplewebauthn/server`を組み合わせることで、変換処理と検証処理の独自実装を減らせる。
 
