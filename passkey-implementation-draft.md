@@ -1,10 +1,12 @@
 ## はじめに
 
+パスキーとはなんぞや、FIDO・WebAudioAPI、はてはて、という方は、[前回の記事](https://qiita.com/tantan0420/items/2af9c119e6baea68042f)を読んでからこの記事を読むことを推奨する。
+
 本記事では、ブラウザ標準のWebAuthn APIを直接呼び出し、サーバー側で`@simplewebauthn/server`を使って登録・認証結果を検証するまでを整理する。
 
-前提となるパスキー、FIDO2、WebAuthn、認証器の関係は入門編で扱った。本記事の範囲は、登録・認証UIを表示した後、実際にブラウザとサーバーの間でデータを受け渡す部分である。
+前回と同様に復習用メモとして構成しているので、度々用語の説明が入っておりわかりやすい構成とはなってないですがご了承ください。
 
-本記事で扱う実装は、[kapitantan/passkey_sandbox](https://github.com/kapitantan/passkey_sandbox)で確認できる。
+本記事で扱う実装は、[kapitantan/passkey_sandbox](https://github.com/kapitantan/passkey_sandbox)で確認できる。（動作確認のために書いたのでかなり汚い...）
 
 今回の実装方針は次のとおりである。
 
@@ -65,8 +67,8 @@ sequenceDiagram
     C->>S: JSON形式の認証結果
     S->>DB: challengeを取得し、認証時は保存済み公開鍵も取得
     S->>S: SimpleWebAuthnで検証
-    S->>DB: 登録時はCredential情報を保存
     S->>DB: 使用済みchallengeを削除
+    S->>DB: 登録時はCredential情報を保存
     S-->>C: 検証結果
 ```
 
@@ -349,19 +351,11 @@ type DecodedAttestationObject = {
   }
 }
 
-// authDataを解析した後の概念的な構造
-type ParsedRegistrationAuthData = {
+// 登録時のauthDataについて、仕様上の論理構造を表したもの
+type RegistrationAuthenticatorDataLayout = {
   rpIdHash: Uint8Array             // RP IDをSHA-256でハッシュした32バイト
-  flags: {                         // UP、UV、AT、EDなどのビットフラグ
-    up: boolean
-    uv: boolean
-    be: boolean
-    bs: boolean
-    at: boolean
-    ed: boolean
-    flagsInt: number
-  }
-  signCount: number                // 署名カウンター
+  flags: number                    // UP、UV、BE、BS、AT、EDなどを表す1バイトのビットフラグ
+  signCount: number                // 4バイトの署名カウンター
   attestedCredentialData: {
     aaguid: Uint8Array             // 認証器モデルを識別する16バイト
     credentialIdLength: number     // credentialIdのバイト長
@@ -882,12 +876,14 @@ type VerifiedAuthenticationResponseOverview = {
 - `authenticationInfo.credentialDeviceType`、`credentialBackedUp`
   - Credentialのデバイス種別とバックアップ状態を示す。
 
->[!note] 署名カウンターについて
-> 署名カウンターに対応する場合、`credential.counter`にはDBに保存している前回値を渡し、検証成功後に保存値を`authenticationInfo.newCounter`で更新する。認証器が返す値は必ずしも前回値に`1`を加えた値とは限らない。
-> 
+> **署名カウンターについて**
+>
+>署名カウンターに対応する場合、`credential.counter`にはDBに保存している前回値を渡し、検証成功後に保存値を`authenticationInfo.newCounter`で更新する。認証器が返す値は必ずしも前回値に`1`を加えた値とは限らない。
+>
 >ただし、署名カウンターを使用しない認証器は`signCount`を常に`0`として返す。今回、Google パスワード マネージャーで作成したCredentialを確認した範囲では`signCount`と`newCounter`がともに`0`だったため、現在の実装では`credential.counter`に`0`を設定している。これは確認した環境とCredentialでの結果であり、Google パスワード マネージャーがすべての環境で署名カウンターを0に設定しているかは不明である。少なくとも私が確認した限りではカウンターは0であった。
 >
->保存値と今回値がともに`0`の場合、署名カウンターによるクローンの兆候検知はできないが、challenge、Origin、RP ID、UP・UVフラグ、署名などの検証は引き続き行われる。詳細は[WebAuthn Level 3のSignature Counter Considerations](https://www.w3.org/TR/webauthn-3/#sctn-sign-counter)を参照。
+> 保存値と今回値がともに`0`の場合、署名カウンターによるクローンの兆候検知はできないが、challenge、Origin、RP ID、UP・UVフラグ、署名などの検証は引き続き行われる。詳細は[WebAuthn Level 3のSignature Counter Considerations](https://www.w3.org/TR/webauthn-3/#sctn-sign-counter)を参照。
+
 
 challengeの一致を確認するだけでは、同じchallengeを再利用できる余地が残る。登録・認証のどちらでも、検証に成功した後でchallengeを一度だけ消費する。
 
@@ -949,9 +945,14 @@ startAuthentication({ optionsJSON })
 
 クライアント側の中心は、Base64URL文字列とバイナリ値を変換し、`create()`または`get()`を呼び出す処理である。
 
-サーバー側の中心は、challenge、Origin、RP ID、署名を検証し、Credential ID、公開鍵、内部ユーザーIDの対応を保存する処理である。署名カウンターを利用する場合は、認証後に`newCounter`も保存する。
+サーバー側の中心は、challenge、Origin、RP ID、署名を検証し、Credential ID、公開鍵、内部ユーザーIDの対応を保存する処理である。
 
 WebAuthn APIを直接利用するとデータの流れを理解しやすい。一方、実運用では`@simplewebauthn/browser`と`@simplewebauthn/server`を組み合わせることで、変換処理と検証処理の独自実装を減らせる。
+
+## 感想
+業務で実装してから改めて整理すると、@simplewebauthn/browserやAttestation、Assertionのオブジェクト構造など、理解が甘かった箇所、拾えてなかった情報が現れたので今回整理して良かったなと感じた。
+
+次にパスキーに関する実装をする際は、@simplewebauthn/browserやモバイルアプリでどういう実装が必要か意識して学んでいきたい。
 
 ## 参考資料
 
@@ -962,4 +963,3 @@ WebAuthn APIを直接利用するとデータの流れを理解しやすい。�
 - [MDN：Web Authentication API](https://developer.mozilla.org/ja/docs/Web/API/Web_Authentication_API)
 - [MDN：CredentialsContainer.create()](https://developer.mozilla.org/ja/docs/Web/API/CredentialsContainer/create)
 - [MDN：CredentialsContainer.get()](https://developer.mozilla.org/ja/docs/Web/API/CredentialsContainer/get)
-**
